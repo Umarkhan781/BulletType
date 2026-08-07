@@ -34,7 +34,7 @@ export function TypingTest({
   const [typedHistory, setTypedHistory] = useState<string[]>([]); // per word
   const [input, setInput] = useState("");
   const [status, setStatus] = useState<"idle" | "running" | "finished">("idle");
-  const [timeLeft, setTimeLeft] = useState(
+  const [timeLeft, setTimeLeft] = useState<number>(
     typeof initialTimer === "number" ? initialTimer : 60
   );
   const [timerOption, setTimerOption] = useState<TimerOption>(initialTimer);
