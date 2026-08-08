@@ -2,180 +2,85 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  Home,
-  BookOpen,
-  Keyboard,
-  Zap,
-  LayoutDashboard,
-  Trophy,
-  User,
-  Settings,
-  Moon,
-  Sun,
-  Menu,
-  X,
-} from "lucide-react";
-import { useState, useEffect } from "react";
-import { useSettingsStore } from "@/store/useSettingsStore";
-import { useUserStore } from "@/store/useUserStore";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { useEffect, useState } from "react";
 
-const navItems = [
-  { href: "/", label: "Home", icon: Home },
-  { href: "/learn", label: "Learn", icon: BookOpen },
-  { href: "/practice", label: "Practice", icon: Keyboard },
-  { href: "/expert", label: "Expert", icon: Zap },
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
-];
-
-export function Navbar() {
+export default function Navbar() {
   const pathname = usePathname();
-  const { theme, setTheme } = useSettingsStore();
-  const { user, isAuthenticated } = useUserStore();
-  const [mobileOpen, setMobileOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
-
-  useEffect(() => setMounted(true), []);
-
-  const toggleTheme = () => {
-    const next = theme === "dark" ? "light" : theme === "light" ? "system" : "dark";
-    setTheme(next);
-    // Apply to document
-    const root = document.documentElement;
-    if (next === "dark" || (next === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
-      root.classList.add("dark");
-    } else {
-      root.classList.remove("dark");
-    }
-  };
+  const [theme, setTheme] = useState<"light" | "dark">("dark");
 
   useEffect(() => {
-    if (!mounted) return;
-    const root = document.documentElement;
-    if (
-      theme === "dark" ||
-      (theme === "system" &&
-        window.matchMedia("(prefers-color-scheme: dark)").matches)
-    ) {
-      root.classList.add("dark");
-    } else {
-      root.classList.remove("dark");
+    setMounted(true);
+    const saved = localStorage.getItem("theme") as "light" | "dark" | null;
+    if (saved) {
+      setTheme(saved);
+      document.documentElement.classList.toggle("dark", saved === "dark");
     }
-  }, [theme, mounted]);
+  }, []);
+
+  const toggleTheme = () => {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    localStorage.setItem("theme", next);
+    document.documentElement.classList.toggle("dark", next === "dark");
+  };
+
+  const links = [
+    { href: "/", label: "Home" },
+    { href: "/learn", label: "Learn" },
+    { href: "/practice", label: "Practice" },
+    { href: "/expert", label: "Expert" },
+    { href: "/dashboard", label: "Dashboard" },
+    { href: "/leaderboard", label: "Leaderboard" },
+  ];
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-white/70 dark:bg-zinc-950/70 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
-        <div className="flex items-center gap-8">
-          <Link href="/" className="flex items-center gap-2 font-bold text-xl tracking-tight">
-            <span className="bg-gradient-to-r from-blue-500 to-cyan-400 bg-clip-text text-transparent">
-              BulletType
-            </span>
-          </Link>
+    <nav className="sticky top-0 z-50 border-b border-white/10 bg-zinc-950/80 backdrop-blur-xl">
+      <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+        {/* Logo */}
+        <Link href="/" className="text-xl font-bold text-blue-400">
+          BulletType
+        </Link>
 
-          <nav className="hidden md:flex items-center gap-1">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const active = pathname === item.href;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={cn(
-                    "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                    active
-                      ? "bg-blue-500/10 text-blue-600 dark:text-blue-400"
-                      : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
-                  )}
-                >
-                  <Icon className="h-4 w-4" />
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
+        {/* Links */}
+        <div className="hidden md:flex items-center gap-6">
+          {links.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className={`text-sm transition ${
+                pathname === link.href
+                  ? "text-white font-medium"
+                  : "text-zinc-400 hover:text-white"
+              }`}
+            >
+              {link.label}
+            </Link>
+          ))}
         </div>
 
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleTheme}
-            aria-label="Toggle theme"
-          >
-            {mounted && theme === "dark" ? (
-              <Sun className="h-5 w-5" />
-            ) : (
-              <Moon className="h-5 w-5" />
-            )}
-          </Button>
-
-          {isAuthenticated && user ? (
-            <Link href="/profile">
-              <Button variant="ghost" size="sm" className="gap-2">
-                <img
-                  src={user.avatar}
-                  alt={user.username}
-                  className="h-7 w-7 rounded-full"
-                />
-                <span className="hidden sm:inline">{user.username}</span>
-              </Button>
-            </Link>
-          ) : (
-            <Link href="/login">
-              <Button size="sm">Login</Button>
-            </Link>
+        {/* Right side */}
+        <div className="flex items-center gap-3">
+          {/* Theme toggle */}
+          {mounted && (
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-lg hover:bg-white/10 transition"
+              aria-label="Toggle theme"
+            >
+              {theme === "dark" ? "☀️" : "🌙"}
+            </button>
           )}
 
-          <Button
-            variant="ghost"
-            size="icon"
-            className="md:hidden"
-            onClick={() => setMobileOpen(!mobileOpen)}
+          {/* Login Button */}
+          <Link
+            href="/login"
+            className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition"
           >
-            {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-          </Button>
+            Login
+          </Link>
         </div>
       </div>
-
-      {/* Mobile menu */}
-      {mobileOpen && (
-        <div className="md:hidden border-t border-white/10 bg-white/90 dark:bg-zinc-950/90 backdrop-blur-xl">
-          <nav className="flex flex-col p-4 gap-1">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const active = pathname === item.href;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setMobileOpen(false)}
-                  className={cn(
-                    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium",
-                    active
-                      ? "bg-blue-500/10 text-blue-600 dark:text-blue-400"
-                      : "text-zinc-600 dark:text-zinc-400"
-                  )}
-                >
-                  <Icon className="h-4 w-4" />
-                  {item.label}
-                </Link>
-              );
-            })}
-            <Link
-              href="/settings"
-              onClick={() => setMobileOpen(false)}
-              className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-zinc-600 dark:text-zinc-400"
-            >
-              <Settings className="h-4 w-4" />
-              Settings
-            </Link>
-          </nav>
-        </div>
-      )}
-    </header>
+    </nav>
   );
 }
