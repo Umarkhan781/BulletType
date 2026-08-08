@@ -34,11 +34,15 @@ const navItems = [
 export function Navbar() {
   const pathname = usePathname();
   const { theme, setTheme } = useSettingsStore();
-  const { user, isAuthenticated } = useUserStore();
+ const { user, isAuthenticated, initializeAuth } = useUserStore();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => setMounted(true), []);
+
+  useEffect(() => {
+  initializeAuth();
+}, [initializeAuth]);
 
   const toggleTheme = () => {
     const next = theme === "dark" ? "light" : theme === "light" ? "system" : "dark";
@@ -113,22 +117,29 @@ export function Navbar() {
             )}
           </Button>
 
-          {isAuthenticated && user ? (
-            <Link href="/profile">
-              <Button variant="ghost" size="sm" className="gap-2">
-                <img
-                  src={user.avatar}
-                  alt={user.username}
-                  className="h-7 w-7 rounded-full"
-                />
-                <span className="hidden sm:inline">{user.username}</span>
-              </Button>
-            </Link>
-          ) : (
-            <Link href="/login">
-              <Button size="sm">Login</Button>
-            </Link>
-          )}
+         {isAuthenticated && user ? (
+  <Link href="/profile">
+    <Button variant="ghost" size="sm" className="gap-2">
+      <img
+        src={user.avatar}
+        alt={user.username}
+        className="h-7 w-7 rounded-full object-cover border border-white/20"
+      />
+      <span className="hidden sm:inline font-medium">{user.username}</span>
+    </Button>
+  </Link>
+) : (
+  <Link href="/login">
+    <Button variant="ghost" size="sm" className="gap-2">
+      <img
+        src="https://api.dicebear.com/7.x/avataaars/svg?seed=speedtyper"
+        alt="speedtyper"
+        className="h-7 w-7 rounded-full object-cover border border-white/20"
+      />
+      <span className="hidden sm:inline font-medium">speedtyper</span>
+    </Button>
+  </Link>
+)}
 
           <Button
             variant="ghost"
