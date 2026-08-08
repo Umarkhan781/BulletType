@@ -1,70 +1,97 @@
 "use client";
 
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { useUserStore } from "@/store/useUserStore";
+import { useState } from "react";
+import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
-  const { setUser } = useUserStore();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isLogin, setIsLogin] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
   const router = useRouter();
 
-  const handleDemoLogin = () => {
-    // Already has mock user in store; just ensure authenticated
-    setUser({
-      id: "user-1",
-      username: "speedtyper",
-      name: "Alex Chen",
-      email: "alex@example.com",
-      avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Alex",
-      bio: "Chasing 150 WPM 🚀",
-      country: "US",
-      xp: 2450,
-      level: 12,
-      totalTests: 87,
-      practiceTime: 340,
-      averageWpm: 78,
-      highestWpm: 112,
-      accuracy: 96.4,
-      dailyStreak: 5,
-      badges: ["first-test", "50-wpm", "75-wpm", "7-day-streak"],
-      achievements: ["First Test", "50 WPM", "75 WPM", "7-Day Streak"],
-      createdAt: Date.now() - 1000 * 60 * 60 * 24 * 45,
-    });
-    router.push("/dashboard");
+  const handleAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setMessage("");
+
+    if (isLogin) {
+      // Login
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (error) {
+        setMessage(error.message);
+      } else {
+        router.push("/dashboard");
+      }
+    } else {
+      // Sign up
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+      if (error) {
+        setMessage(error.message);
+      } else {
+        setMessage("Check your email for confirmation link!");
+      }
+    }
+    setLoading(false);
   };
 
   return (
-    <div className="mx-auto max-w-md px-4 py-20">
-      <div className="glass rounded-3xl p-8 sm:p-10 text-center">
-        <h1 className="text-2xl font-bold mb-2">Welcome back</h1>
-        <p className="text-zinc-500 mb-8">Sign in to track your progress</p>
+    <div className="min-h-screen flex items-center justify-center bg-zinc-950 px-4">
+      <div className="w-full max-w-md p-8 rounded-2xl bg-white/5 border border-white/10 backdrop-blur">
+        <h1 className="text-3xl font-bold text-center mb-2 text-white">
+          {isLogin ? "Welcome Back" : "Create Account"}
+        </h1>
+        <p className="text-center text-zinc-400 mb-8">
+          {isLogin ? "Login to BulletType" : "Join BulletType"}
+        </p>
 
-        <div className="space-y-3">
-          <Button className="w-full" variant="outline" onClick={handleDemoLogin}>
-            Continue with Google
-          </Button>
-          <Button className="w-full" variant="outline" onClick={handleDemoLogin}>
-            Continue with GitHub
-          </Button>
-          <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-white/10" />
-            </div>
-            <div className="relative flex justify-center text-xs">
-              <span className="bg-zinc-950 px-2 text-zinc-500">or</span>
-            </div>
-          </div>
-          <Button className="w-full" onClick={handleDemoLogin}>
-            Demo Login (Guest)
-          </Button>
-        </div>
+        <form onSubmit={handleAuth} className="space-y-4">
+          <input
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-zinc-500 focus:outline-none focus:border-blue-500"
+          />
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-zinc-500 focus:outline-none focus:border-blue-500"
+          />
 
-        <p className="mt-6 text-sm text-zinc-500">
-          Don&apos;t have an account?{" "}
-          <Link href="/login" className="text-blue-400 hover:underline">
-            Sign up
-          </Link>
+          {message && (
+            <p className="text-sm text-center text-red-400">{message}</p>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium transition disabled:opacity-50"
+          >
+            {loading ? "Please wait..." : isLogin ? "Login" : "Sign Up"}
+          </button>
+        </form>
+
+        <p className="text-center text-zinc-400 mt-6">
+          {isLogin ? "Don't have an account?" : "Already have an account?"}{" "}
+          <button
+            onClick={() => setIsLogin(!isLogin)}
+            className="text-blue-400 hover:underline"
+          >
+            {isLogin ? "Sign Up" : "Login"}
+          </button>
         </p>
       </div>
     </div>
