@@ -19,6 +19,7 @@ import {
 import { useState, useEffect } from "react";
 import { useSettingsStore } from "@/store/useSettingsStore";
 import { useUserStore } from "@/store/useUserStore";
+import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -41,8 +42,26 @@ export function Navbar() {
   useEffect(() => setMounted(true), []);
 
   useEffect(() => {
-  initializeAuth();
-}, [initializeAuth]);
+    initializeAuth();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event) => {
+      if (
+        event === "SIGNED_IN" ||
+        event === "SIGNED_OUT" ||
+        event === "TOKEN_REFRESHED" ||
+        event === "USER_UPDATED"
+      ) {
+        // Defer so we don't call getSession inside the auth callback (Supabase race)
+        setTimeout(() => {
+          void initializeAuth();
+        }, 0);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [initializeAuth]);
 
   const toggleTheme = () => {
     const next = theme === "dark" ? "light" : theme === "light" ? "system" : "dark";

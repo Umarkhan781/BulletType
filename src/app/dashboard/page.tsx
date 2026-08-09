@@ -1,9 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useUserStore } from "@/store/useUserStore";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-// motion optional
 import {
   Activity,
   Target,
@@ -18,18 +18,41 @@ import {
 import { Button } from "@/components/ui/button";
 
 export default function DashboardPage() {
-  const { user, recentTests, logout } = useUserStore();
+  const { user, recentTests, logout, initializeAuth } = useUserStore();
   const router = useRouter();
+  const [authChecked, setAuthChecked] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      await initializeAuth();
+      if (mounted) setAuthChecked(true);
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [initializeAuth]);
 
   const handleLogout = async () => {
     await logout();
     router.push("/login");
   };
 
+  if (!authChecked) {
+    return (
+      <div className="mx-auto max-w-7xl px-4 py-20 text-center">
+        <p className="text-zinc-500">Loading dashboard...</p>
+      </div>
+    );
+  }
+
   if (!user) {
     return (
       <div className="mx-auto max-w-7xl px-4 py-20 text-center">
-        <p className="text-zinc-500">Please log in to view your dashboard.</p>
+        <p className="text-zinc-500 mb-4">Please log in to view your dashboard.</p>
+        <Link href="/login">
+          <Button>Login</Button>
+        </Link>
       </div>
     );
   }
@@ -57,7 +80,7 @@ export default function DashboardPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 self-start">
-          <Link href="/profile">
+          <Link href="/profile?edit=1">
             <Button variant="ghost" size="sm" className="gap-2">
               <Pencil className="h-4 w-4" />
               Edit profile
@@ -76,16 +99,10 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-10">
-        {stats.map((s, i) => {
+        {stats.map((s) => {
           const Icon = s.icon;
           return (
-            <div
-              key={s.label}
-             
-             
-             
-              className="glass rounded-2xl p-5"
-            >
+            <div key={s.label} className="glass rounded-2xl p-5">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-zinc-500">{s.label}</span>
                 <Icon className={`h-5 w-5 ${s.color}`} />

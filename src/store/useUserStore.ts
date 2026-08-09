@@ -3,6 +3,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { supabase } from "@/lib/supabase";
+import { recordUserVisit } from "@/lib/visits";
 import type { UserProfile, TestResult } from "@/types";
 
 interface UserState {
@@ -179,82 +180,97 @@ export const useUserStore = create<UserState>()(
       },
 
       initializeAuth: async () => {
-        const { data: { session } } = await supabase.auth.getSession();
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
 
-        if (session?.user) {
-          const meta = session.user.user_metadata || {};
-          const metaUsername =
-            (typeof meta.username === "string" && meta.username.trim()) ||
-            session.user.email?.split("@")[0] ||
-            "user";
-          const metaFullName =
-            (typeof meta.full_name === "string" && meta.full_name.trim()) ||
-            metaUsername ||
-            "User";
+          if (session?.user) {
+            const meta = session.user.user_metadata || {};
+            const metaUsername =
+              (typeof meta.username === "string" && meta.username.trim()) ||
+              session.user.email?.split("@")[0] ||
+              "user";
+            const metaFullName =
+              (typeof meta.full_name === "string" && meta.full_name.trim()) ||
+              metaUsername ||
+              "User";
 
-          // Try to load profile from database
-          let { data: profile } = await supabase
-            .from("profiles")
-            .select("*")
-            .eq("id", session.user.id)
-            .single();
-
-          // Create / backfill profile from signup metadata if missing
-          if (!profile) {
-            await supabase.from("profiles").upsert({
-              id: session.user.id,
-              username: metaUsername,
-              full_name: metaFullName,
-            });
-            const refreshed = await supabase
+            // maybeSingle avoids throwing when no profile row exists yet
+            let { data: profile } = await supabase
               .from("profiles")
               .select("*")
               .eq("id", session.user.id)
-              .single();
-            profile = refreshed.data;
-          } else if (
-            (!profile.username || !profile.full_name) &&
-            (meta.username || meta.full_name)
-          ) {
-            await supabase
-              .from("profiles")
-              .update({
+              .maybeSingle();
+
+            // Create / backfill profile from signup metadata if missing
+            if (!profile) {
+              await supabase.from("profiles").upsert({
+                id: session.user.id,
+                username: metaUsername,
+                full_name: metaFullName,
+              });
+              const refreshed = await supabase
+                .from("profiles")
+                .select("*")
+                .eq("id", session.user.id)
+                .maybeSingle();
+              profile = refreshed.data;
+            } else if (
+              (!profile.username || !profile.full_name) &&
+              (meta.username || meta.full_name)
+            ) {
+              await supabase
+                .from("profiles")
+                .update({
+                  username: profile.username || metaUsername,
+                  full_name: profile.full_name || metaFullName,
+                })
+                .eq("id", session.user.id);
+              profile = {
+                ...profile,
                 username: profile.username || metaUsername,
                 full_name: profile.full_name || metaFullName,
-              })
-              .eq("id", session.user.id);
-            profile = {
-              ...profile,
-              username: profile.username || metaUsername,
-              full_name: profile.full_name || metaFullName,
+              };
+            }
+
+            const userProfile: UserProfile = {
+              id: session.user.id,
+              username: profile?.username || metaUsername,
+              name: profile?.full_name || metaFullName,
+              email: session.user.email || "",
+              avatar:
+                profile?.avatar_url ||
+                `https://api.dicebear.com/7.x/avataaars/svg?seed=${session.user.id}`,
+              bio: profile?.bio || "",
+              country: profile?.country || "",
+
+              xp: profile?.xp || 0,
+              level: profile?.level || 1,
+              totalTests: profile?.total_tests || 0,
+              practiceTime: profile?.practice_time || 0,
+              averageWpm: profile?.average_wpm || 0,
+              highestWpm: profile?.highest_wpm || 0,
+              accuracy: profile?.accuracy || 0,
+              dailyStreak: profile?.daily_streak || 0,
+              badges: profile?.badges || [],
+              achievements: profile?.achievements || [],
+              createdAt: profile?.created_at
+                ? new Date(profile.created_at).getTime()
+                : Date.now(),
             };
+
+            set({ user: userProfile, isAuthenticated: true });
+
+            // Track visit / last seen for admin analytics (non-blocking)
+            void recordUserVisit(session.user.id);
+          } else {
+            set({ user: null, isAuthenticated: false });
           }
-
-          const userProfile: UserProfile = {
-            id: session.user.id,
-            username: profile?.username || metaUsername,
-            name: profile?.full_name || metaFullName,
-            email: session.user.email || "",
-            avatar: profile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${session.user.id}`,
-            bio: profile?.bio || "",
-            country: profile?.country || "",
-
-            xp: profile?.xp || 0,
-            level: profile?.level || 1,
-            totalTests: profile?.total_tests || 0,
-            practiceTime: profile?.practice_time || 0,
-            averageWpm: profile?.average_wpm || 0,
-            highestWpm: profile?.highest_wpm || 0,
-            accuracy: profile?.accuracy || 0,
-            dailyStreak: profile?.daily_streak || 0,
-            badges: profile?.badges || [],
-            achievements: profile?.achievements || [],
-            createdAt: profile?.created_at ? new Date(profile.created_at).getTime() : Date.now(),
-          };
-
-          set({ user: userProfile, isAuthenticated: true });
-        } else {
-          set({ user: null, isAuthenticated: false });
+        } catch {
+          // Keep any existing local user if network/profile fetch fails mid-session
+          const existing = get().user;
+          if (!existing) {
+            set({ user: null, isAuthenticated: false });
+          }
         }
       },
     }),

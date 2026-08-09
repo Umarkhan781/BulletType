@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
+import { useUserStore } from "@/store/useUserStore";
 
 type AuthMode = "login" | "signup" | "forgot";
 
@@ -16,6 +17,7 @@ export default function LoginPage() {
   const [message, setMessage] = useState("");
   const [messageOk, setMessageOk] = useState(false);
   const router = useRouter();
+  const initializeAuth = useUserStore((s) => s.initializeAuth);
 
   const switchMode = (next: AuthMode) => {
     setMode(next);
@@ -51,6 +53,8 @@ export default function LoginPage() {
       if (error) {
         setMessage(error.message);
       } else {
+        // Load user into store before navigating (dashboard reads from store)
+        await initializeAuth();
         router.push("/dashboard");
       }
     } else {
