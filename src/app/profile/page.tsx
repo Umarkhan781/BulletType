@@ -1,12 +1,19 @@
 "use client";
 
 import { useUserStore } from "@/store/useUserStore";
-import { Award, MapPin, Calendar, Target } from "lucide-react";
+import { Award, MapPin, Calendar, Target, LogOut } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 
 export default function ProfilePage() {
-  const { user, recentTests } = useUserStore();
+  const { user, recentTests, logout } = useUserStore();
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    await logout();
+    router.push("/login");
+  };
 
   if (!user) {
     return (
@@ -28,7 +35,7 @@ export default function ProfilePage() {
             alt={user.username}
             className="h-24 w-24 rounded-full border-4 border-blue-500/30"
           />
-          <div className="text-center sm:text-left">
+          <div className="text-center sm:text-left flex-1">
             <h1 className="text-2xl font-bold">{user.name}</h1>
             <p className="text-zinc-500">@{user.username}</p>
             {user.bio && <p className="mt-2 text-sm">{user.bio}</p>}
@@ -47,6 +54,15 @@ export default function ProfilePage() {
               </span>
             </div>
           </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleLogout}
+            className="gap-2 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+          >
+            <LogOut className="h-4 w-4" />
+            Logout
+          </Button>
         </div>
 
         <div className="mt-8 grid grid-cols-2 sm:grid-cols-4 gap-4">

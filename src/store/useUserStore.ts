@@ -68,22 +68,63 @@ export const useUserStore = create<UserState>()(
         const { data: { session } } = await supabase.auth.getSession();
 
         if (session?.user) {
+          const meta = session.user.user_metadata || {};
+          const metaUsername =
+            (typeof meta.username === "string" && meta.username.trim()) ||
+            session.user.email?.split("@")[0] ||
+            "user";
+          const metaFullName =
+            (typeof meta.full_name === "string" && meta.full_name.trim()) ||
+            metaUsername ||
+            "User";
+
           // Try to load profile from database
-          const { data: profile } = await supabase
+          let { data: profile } = await supabase
             .from("profiles")
             .select("*")
             .eq("id", session.user.id)
             .single();
 
+          // Create / backfill profile from signup metadata if missing
+          if (!profile) {
+            await supabase.from("profiles").upsert({
+              id: session.user.id,
+              username: metaUsername,
+              full_name: metaFullName,
+            });
+            const refreshed = await supabase
+              .from("profiles")
+              .select("*")
+              .eq("id", session.user.id)
+              .single();
+            profile = refreshed.data;
+          } else if (
+            (!profile.username || !profile.full_name) &&
+            (meta.username || meta.full_name)
+          ) {
+            await supabase
+              .from("profiles")
+              .update({
+                username: profile.username || metaUsername,
+                full_name: profile.full_name || metaFullName,
+              })
+              .eq("id", session.user.id);
+            profile = {
+              ...profile,
+              username: profile.username || metaUsername,
+              full_name: profile.full_name || metaFullName,
+            };
+          }
+
           const userProfile: UserProfile = {
             id: session.user.id,
-            username: profile?.username || session.user.email?.split("@")[0] || "user",
-            name: profile?.full_name || session.user.email?.split("@")[0] || "User",
+            username: profile?.username || metaUsername,
+            name: profile?.full_name || metaFullName,
             email: session.user.email || "",
             avatar: profile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${session.user.id}`,
             bio: profile?.bio || "",
             country: profile?.country || "",
-            
+
             xp: profile?.xp || 0,
             level: profile?.level || 1,
             totalTests: profile?.total_tests || 0,
