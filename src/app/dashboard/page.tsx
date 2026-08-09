@@ -2,6 +2,7 @@
 
 import { useUserStore } from "@/store/useUserStore";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 // motion optional
 import {
   Activity,
@@ -12,6 +13,7 @@ import {
   TrendingUp,
   Zap,
   LogOut,
+  Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -54,15 +56,23 @@ export default function DashboardPage() {
             ) : null}
           </p>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleLogout}
-          className="gap-2 self-start text-red-400 hover:text-red-300 hover:bg-red-500/10"
-        >
-          <LogOut className="h-4 w-4" />
-          Logout
-        </Button>
+        <div className="flex flex-wrap items-center gap-2 self-start">
+          <Link href="/profile">
+            <Button variant="ghost" size="sm" className="gap-2">
+              <Pencil className="h-4 w-4" />
+              Edit profile
+            </Button>
+          </Link>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleLogout}
+            className="gap-2 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+          >
+            <LogOut className="h-4 w-4" />
+            Logout
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-10">

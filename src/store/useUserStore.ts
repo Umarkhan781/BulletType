@@ -12,6 +12,11 @@ interface UserState {
   setUser: (user: UserProfile | null) => void;
   addTestResult: (result: TestResult) => void;
   updateStats: (stats: Partial<UserProfile>) => void;
+  updateProfile: (data: {
+    name: string;
+    username: string;
+  }) => Promise<{ error: string | null }>;
+  updateAvatar: (file: File) => Promise<{ error: string | null }>;
   logout: () => Promise<void>;
   initializeAuth: () => Promise<void>;
 }
@@ -58,6 +63,115 @@ export const useUserStore = create<UserState>()(
         set((state) => ({
           user: state.user ? { ...state.user, ...stats } : null,
         })),
+
+      updateProfile: async ({ name, username }) => {
+        const current = get().user;
+        if (!current) return { error: "Not logged in." };
+
+        const cleanName = name.trim();
+        const cleanUsername = username.trim().replace(/^@/, "");
+
+        if (!cleanName || !cleanUsername) {
+          return { error: "Full name and username are required." };
+        }
+        if (cleanUsername.length < 3) {
+          return { error: "Username must be at least 3 characters." };
+        }
+
+        const { error: profileError } = await supabase.from("profiles").upsert({
+          id: current.id,
+          full_name: cleanName,
+          username: cleanUsername,
+        });
+
+        if (profileError) {
+          return { error: profileError.message };
+        }
+
+        // Keep auth metadata in sync (used as fallback on login)
+        await supabase.auth.updateUser({
+          data: {
+            full_name: cleanName,
+            username: cleanUsername,
+          },
+        });
+
+        set({
+          user: {
+            ...current,
+            name: cleanName,
+            username: cleanUsername,
+          },
+        });
+
+        return { error: null };
+      },
+
+      updateAvatar: async (file) => {
+        const current = get().user;
+        if (!current) return { error: "Not logged in." };
+
+        const allowed = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+        if (!allowed.includes(file.type)) {
+          return { error: "Use a JPG, PNG, WebP, or GIF image." };
+        }
+        if (file.size > 2 * 1024 * 1024) {
+          return { error: "Image must be under 2MB." };
+        }
+
+        const ext =
+          file.type === "image/png"
+            ? "png"
+            : file.type === "image/webp"
+              ? "webp"
+              : file.type === "image/gif"
+                ? "gif"
+                : "jpg";
+        const path = `${current.id}/avatar.${ext}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("avatars")
+          .upload(path, file, {
+            upsert: true,
+            contentType: file.type,
+            cacheControl: "3600",
+          });
+
+        if (uploadError) {
+          return { error: uploadError.message };
+        }
+
+        const { data: publicData } = supabase.storage
+          .from("avatars")
+          .getPublicUrl(path);
+
+        // Bust browser cache after re-upload
+        const avatarUrl = `${publicData.publicUrl}?t=${Date.now()}`;
+
+        const { error: profileError } = await supabase.from("profiles").upsert({
+          id: current.id,
+          avatar_url: avatarUrl,
+          username: current.username,
+          full_name: current.name,
+        });
+
+        if (profileError) {
+          return { error: profileError.message };
+        }
+
+        await supabase.auth.updateUser({
+          data: { avatar_url: avatarUrl },
+        });
+
+        set({
+          user: {
+            ...current,
+            avatar: avatarUrl,
+          },
+        });
+
+        return { error: null };
+      },
 
       logout: async () => {
         await supabase.auth.signOut();
