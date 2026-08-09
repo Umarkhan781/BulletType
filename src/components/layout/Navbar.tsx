@@ -44,6 +44,15 @@ export function Navbar() {
   useEffect(() => {
     initializeAuth();
 
+    // Record a site visit for everyone (guest + logged-in), including mobile
+    void (async () => {
+      const { recordSiteVisit } = await import("@/lib/visits");
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      await recordSiteVisit(session?.user?.id ?? null);
+    })();
+
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event) => {
@@ -56,6 +65,15 @@ export function Navbar() {
         // Defer so we don't call getSession inside the auth callback (Supabase race)
         setTimeout(() => {
           void initializeAuth();
+        }, 0);
+      }
+      if (event === "SIGNED_IN") {
+        setTimeout(async () => {
+          const { recordSiteVisit } = await import("@/lib/visits");
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
+          await recordSiteVisit(session?.user?.id ?? null);
         }, 0);
       }
     });

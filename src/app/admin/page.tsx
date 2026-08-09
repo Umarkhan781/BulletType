@@ -12,6 +12,7 @@ import {
   Zap,
   TrendingUp,
   UserCheck,
+  AlertTriangle,
 } from "lucide-react";
 
 interface Result {
@@ -34,48 +35,36 @@ interface AdminStats {
   activeUsers: number;
 }
 
-async function countVisitsSince(sinceISO: string): Promise<number> {
-  // Prefer dedicated visit log
+async function countVisitsSince(sinceISO: string): Promise<{
+  count: number;
+  error?: string;
+}> {
   const visits = await supabase
     .from("user_visits")
     .select("*", { count: "exact", head: true })
     .gte("visited_at", sinceISO);
 
-  if (!visits.error && typeof visits.count === "number") {
-    return visits.count;
+  if (!visits.error) {
+    return { count: visits.count || 0 };
   }
 
-  // Fallback: created_at column name if schema differs
+  // Fallback column name
   const alt = await supabase
     .from("user_visits")
     .select("*", { count: "exact", head: true })
     .gte("created_at", sinceISO);
 
-  if (!alt.error && typeof alt.count === "number") {
-    return alt.count;
+  if (!alt.error) {
+    return { count: alt.count || 0 };
   }
 
-  // Fallback: unique profiles seen since (last_seen_at)
-  const seen = await supabase
-    .from("profiles")
-    .select("*", { count: "exact", head: true })
-    .gte("last_seen_at", sinceISO);
-
-  if (!seen.error && typeof seen.count === "number") {
-    return seen.count;
-  }
-
-  // Last fallback: profiles created in range (registration ≈ first visit)
-  const created = await supabase
-    .from("profiles")
-    .select("*", { count: "exact", head: true })
-    .gte("created_at", sinceISO);
-
-  return created.count || 0;
+  return {
+    count: 0,
+    error: visits.error.message || alt.error?.message || "user_visits unavailable",
+  };
 }
 
 async function countActiveUsers(): Promise<number> {
-  // Active = last seen in the past 7 days
   const since = daysAgoISO(7);
 
   const bySeen = await supabase
@@ -87,17 +76,21 @@ async function countActiveUsers(): Promise<number> {
     return bySeen.count;
   }
 
-  // Fallback: distinct users who logged a visit in 7 days
   const byVisits = await supabase
     .from("user_visits")
-    .select("user_id")
-    .gte("visited_at", since);
+    .select("user_id, visitor_id")
+    .gte("visited_at", since)
+    .limit(5000);
 
   if (!byVisits.error && byVisits.data) {
-    return new Set(byVisits.data.map((r) => r.user_id).filter(Boolean)).size;
+    const keys = new Set<string>();
+    for (const row of byVisits.data) {
+      if (row.user_id) keys.add(`u:${row.user_id}`);
+      else if (row.visitor_id) keys.add(`v:${row.visitor_id}`);
+    }
+    return keys.size;
   }
 
-  // Fallback: users with a test in last 7 days
   const byResults = await supabase
     .from("results")
     .select("user_id")
@@ -113,6 +106,7 @@ async function countActiveUsers(): Promise<number> {
 export default function AdminPage() {
   const [results, setResults] = useState<Result[]>([]);
   const [loading, setLoading] = useState(true);
+  const [setupWarning, setSetupWarning] = useState<string | null>(null);
   const [stats, setStats] = useState<AdminStats>({
     totalTests: 0,
     averageWpm: 0,
@@ -126,6 +120,7 @@ export default function AdminPage() {
   useEffect(() => {
     async function loadData() {
       setLoading(true);
+      setSetupWarning(null);
 
       const { data: resultsData } = await supabase
         .from("results")
@@ -137,12 +132,19 @@ export default function AdminPage() {
         .from("profiles")
         .select("*", { count: "exact", head: true });
 
-      const [visitsLast30Days, visitsLast12Months, activeUsers] =
-        await Promise.all([
-          countVisitsSince(daysAgoISO(30)),
-          countVisitsSince(monthsAgoISO(12)),
-          countActiveUsers(),
-        ]);
+      const [v30, v12, activeUsers] = await Promise.all([
+        countVisitsSince(daysAgoISO(30)),
+        countVisitsSince(monthsAgoISO(12)),
+        countActiveUsers(),
+      ]);
+
+      if (v30.error || v12.error) {
+        setSetupWarning(
+          v30.error ||
+            v12.error ||
+            "Visit table missing. Run supabase/admin-analytics.sql in Supabase SQL Editor."
+        );
+      }
 
       const rows = resultsData || [];
       setResults(rows);
@@ -159,8 +161,8 @@ export default function AdminPage() {
         averageWpm,
         highestWpm,
         totalUsers: userCount || 0,
-        visitsLast30Days,
-        visitsLast12Months,
+        visitsLast30Days: v30.count,
+        visitsLast12Months: v12.count,
         activeUsers,
       });
 
@@ -211,14 +213,14 @@ export default function AdminPage() {
       value: stats.visitsLast30Days,
       icon: CalendarDays,
       color: "text-cyan-400",
-      hint: "Logged visits in the past 30 days",
+      hint: "Site visits in the past 30 days (guest + logged-in)",
     },
     {
       label: "Visits (Last 12 Months)",
       value: stats.visitsLast12Months,
       icon: CalendarRange,
       color: "text-sky-400",
-      hint: "Logged visits in the past 12 months",
+      hint: "Site visits in the past 12 months",
     },
     {
       label: "Active Users",
@@ -236,7 +238,25 @@ export default function AdminPage() {
         Overview of tests, users, and traffic
       </p>
 
-      {/* Overview */}
+      {setupWarning && (
+        <div className="mb-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 flex gap-3">
+          <AlertTriangle className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
+          <div className="text-sm text-amber-100/90">
+            <p className="font-medium text-amber-300 mb-1">
+              Visit tracking is not set up in Supabase
+            </p>
+            <p className="text-amber-200/80">
+              {setupWarning}
+            </p>
+            <p className="mt-2 text-amber-200/70">
+              Open Supabase → SQL Editor → run{" "}
+              <code className="text-amber-100">supabase/admin-analytics.sql</code>
+              , then visit the site again (phone or PC) and refresh this page.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         {overviewCards.map((card) => {
           const Icon = card.icon;
@@ -257,7 +277,6 @@ export default function AdminPage() {
         })}
       </div>
 
-      {/* Traffic & engagement */}
       <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
         <Target className="h-5 w-5 text-blue-400" />
         User visits & activity
@@ -283,7 +302,6 @@ export default function AdminPage() {
         })}
       </div>
 
-      {/* Recent Results */}
       <h2 className="text-xl font-semibold mb-4">Recent Tests</h2>
 
       {results.length === 0 ? (

@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase";
 
-const VISIT_SESSION_KEY = "bullettype-visit-recorded";
+const VISIT_SESSION_KEY = "bullettype-visit-recorded-v2";
+const VISITOR_KEY = "bullettype-visitor-id";
 
 /** Start of local calendar day as ISO string */
 function startOfLocalDayISO() {
@@ -9,42 +10,102 @@ function startOfLocalDayISO() {
   return d.toISOString();
 }
 
+function getVisitorId(): string {
+  if (typeof window === "undefined") return "server";
+  try {
+    let id = localStorage.getItem(VISITOR_KEY);
+    if (!id) {
+      id =
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `v-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      localStorage.setItem(VISITOR_KEY, id);
+    }
+    return id;
+  } catch {
+    return `tmp-${Date.now()}`;
+  }
+}
+
 /**
- * Record a user visit once per browser session (and at most once per day in DB).
- * Updates profiles.last_seen_at and inserts into user_visits when available.
+ * Record a site visit once per browser tab session.
+ * Works for logged-in and guest users (mobile included).
+ * Updates profiles.last_seen_at when userId is present.
  */
-export async function recordUserVisit(userId: string): Promise<void> {
-  if (typeof window !== "undefined") {
-    const already = sessionStorage.getItem(VISIT_SESSION_KEY);
-    if (already === userId) return;
-    sessionStorage.setItem(VISIT_SESSION_KEY, userId);
+export async function recordSiteVisit(userId?: string | null): Promise<void> {
+  if (typeof window === "undefined") return;
+
+  const visitorId = getVisitorId();
+  const sessionTag = userId ? `user:${userId}` : `guest:${visitorId}`;
+
+  try {
+    if (sessionStorage.getItem(VISIT_SESSION_KEY) === sessionTag) {
+      return;
+    }
+  } catch {
+    // private mode may block sessionStorage
   }
 
   const now = new Date().toISOString();
 
-  // Heartbeat for "Active Users" (last_seen_at)
-  await supabase
-    .from("profiles")
-    .update({ last_seen_at: now })
-    .eq("id", userId);
+  // Active user heartbeat
+  if (userId) {
+    await supabase
+      .from("profiles")
+      .update({ last_seen_at: now })
+      .eq("id", userId);
+  }
 
-  // Daily visit log (ignore errors if table/column not set up yet)
+  // Avoid duplicate daily row for same visitor (best-effort)
+  let alreadyToday = false;
   try {
-    const { count } = await supabase
+    let query = supabase
       .from("user_visits")
-      .select("*", { count: "exact", head: true })
-      .eq("user_id", userId)
-      .gte("created_at", startOfLocalDayISO());
+      .select("id", { count: "exact", head: true })
+      .gte("visited_at", startOfLocalDayISO());
 
-    if (!count) {
-      await supabase.from("user_visits").insert({
-        user_id: userId,
-        visited_at: now,
-      });
+    if (userId) {
+      query = query.eq("user_id", userId);
+    } else {
+      query = query.eq("visitor_id", visitorId);
+    }
+
+    const { count, error } = await query;
+    if (!error && (count || 0) > 0) {
+      alreadyToday = true;
     }
   } catch {
-    // table may not exist yet
+    // ignore
   }
+
+  if (!alreadyToday) {
+    const { error } = await supabase.from("user_visits").insert({
+      user_id: userId || null,
+      visitor_id: visitorId,
+      visited_at: now,
+      user_agent:
+        typeof navigator !== "undefined"
+          ? navigator.userAgent.slice(0, 300)
+          : null,
+    });
+
+    // If insert fails (table/policies missing), don't mark session as recorded
+    if (error) {
+      console.warn("[visits] failed to record visit:", error.message);
+      return;
+    }
+  }
+
+  try {
+    sessionStorage.setItem(VISIT_SESSION_KEY, sessionTag);
+  } catch {
+    // ignore
+  }
+}
+
+/** @deprecated use recordSiteVisit */
+export async function recordUserVisit(userId: string): Promise<void> {
+  return recordSiteVisit(userId);
 }
 
 export function daysAgoISO(days: number) {

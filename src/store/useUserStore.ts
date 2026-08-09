@@ -3,7 +3,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { supabase } from "@/lib/supabase";
-import { recordUserVisit } from "@/lib/visits";
+import { recordSiteVisit } from "@/lib/visits";
 import type { UserProfile, TestResult } from "@/types";
 
 interface UserState {
@@ -261,7 +261,7 @@ export const useUserStore = create<UserState>()(
             set({ user: userProfile, isAuthenticated: true });
 
             // Track visit / last seen for admin analytics (non-blocking)
-            void recordUserVisit(session.user.id);
+            void recordSiteVisit(session.user.id);
           } else {
             set({ user: null, isAuthenticated: false });
           }
