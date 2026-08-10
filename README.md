@@ -1,4 +1,4 @@
-# TypeMaster — Modern Typing Learning Website
+# BulletType — Modern Typing Learning Website
 
 A premium, fully responsive typing practice & learning platform built with **Next.js 16 + React 19 + TypeScript + Tailwind CSS v4**.
 
