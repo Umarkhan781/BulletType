@@ -55,6 +55,12 @@ export default function LoginPage() {
       } else {
         // Load user into store before navigating (dashboard reads from store)
         await initializeAuth();
+        const { logUserAction } = await import("@/lib/activity");
+        await logUserAction({
+          actionType: "login",
+          path: "/login",
+          details: "password login",
+        });
         router.push("/dashboard");
       }
     } else {
@@ -87,6 +93,14 @@ export default function LoginPage() {
             id: data.user.id,
             username: cleanUsername,
             full_name: cleanFullName,
+            email: email.trim(),
+          });
+          const { logUserAction } = await import("@/lib/activity");
+          await logUserAction({
+            actionType: "signup",
+            path: "/login",
+            userId: data.user.id,
+            details: `New account @${cleanUsername}`,
           });
         }
         setMessageOk(true);

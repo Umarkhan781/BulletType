@@ -190,6 +190,15 @@ export const useUserStore = create<UserState>()(
           },
         });
 
+        void import("@/lib/activity").then(({ logUserAction }) =>
+          logUserAction({
+            actionType: "profile_update",
+            path: "/profile",
+            userId: current.id,
+            details: `Name/username → ${cleanName} / @${cleanUsername}`,
+          })
+        );
+
         return { error: null };
       },
 
@@ -272,6 +281,15 @@ export const useUserStore = create<UserState>()(
             avatar: avatarUrl,
           },
         });
+
+        void import("@/lib/activity").then(({ logUserAction }) =>
+          logUserAction({
+            actionType: "avatar_update",
+            path: "/profile",
+            userId: current.id,
+            details: "Uploaded profile photo",
+          })
+        );
 
         return { error: null };
       },

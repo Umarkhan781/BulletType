@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-// motion optional
 import {
   Keyboard,
   Hash,
@@ -11,62 +10,205 @@ import {
   Code2,
   ArrowRight,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
-const lessons = [
-  { id: "home-row", title: "Home Row", desc: "asdf jkl;", icon: Keyboard, level: "Beginner", color: "from-emerald-500 to-teal-500" },
-  { id: "top-row", title: "Top Row", desc: "qwerty uiop", icon: Keyboard, level: "Beginner", color: "from-blue-500 to-cyan-500" },
-  { id: "bottom-row", title: "Bottom Row", desc: "zxcv bnm", icon: Keyboard, level: "Beginner", color: "from-violet-500 to-purple-500" },
-  { id: "capitals", title: "Capital Letters", desc: "Shift key mastery", icon: Type, level: "Intermediate", color: "from-amber-500 to-orange-500" },
-  { id: "numbers", title: "Numbers", desc: "1234567890", icon: Hash, level: "Intermediate", color: "from-pink-500 to-rose-500" },
-  { id: "symbols", title: "Symbols", desc: "!@#$%^&*()", icon: Braces, level: "Intermediate", color: "from-indigo-500 to-blue-500" },
-  { id: "words", title: "Common Words", desc: "High-frequency vocabulary", icon: AlignLeft, level: "All", color: "from-cyan-500 to-teal-500" },
-  { id: "sentences", title: "Sentences", desc: "Full sentences & punctuation", icon: AlignLeft, level: "All", color: "from-green-500 to-emerald-500" },
-  { id: "paragraphs", title: "Paragraphs", desc: "Long-form typing endurance", icon: AlignLeft, level: "Advanced", color: "from-red-500 to-orange-500" },
-  { id: "code", title: "Programming Code", desc: "JS, Python, HTML, CSS, SQL", icon: Code2, level: "Advanced", color: "from-fuchsia-500 to-pink-500" },
+type Level = "Beginner" | "Intermediate" | "All" | "Advanced";
+
+const lessons: {
+  id: string;
+  title: string;
+  desc: string;
+  icon: typeof Keyboard;
+  level: Level;
+}[] = [
+  {
+    id: "home-row",
+    title: "Home Row",
+    desc: "Master the foundation keys: asdf jkl;",
+    icon: Keyboard,
+    level: "Beginner",
+  },
+  {
+    id: "top-row",
+    title: "Top Row",
+    desc: "Build speed on qwerty uiop",
+    icon: Keyboard,
+    level: "Beginner",
+  },
+  {
+    id: "bottom-row",
+    title: "Bottom Row",
+    desc: "Complete the layout with zxcv bnm",
+    icon: Keyboard,
+    level: "Beginner",
+  },
+  {
+    id: "capitals",
+    title: "Capital Letters",
+    desc: "Shift key control and accuracy",
+    icon: Type,
+    level: "Intermediate",
+  },
+  {
+    id: "numbers",
+    title: "Numbers",
+    desc: "Type 1234567890 with confidence",
+    icon: Hash,
+    level: "Intermediate",
+  },
+  {
+    id: "symbols",
+    title: "Symbols",
+    desc: "Punctuation and special characters",
+    icon: Braces,
+    level: "Intermediate",
+  },
+  {
+    id: "words",
+    title: "Common Words",
+    desc: "High-frequency vocabulary practice",
+    icon: AlignLeft,
+    level: "All",
+  },
+  {
+    id: "sentences",
+    title: "Sentences",
+    desc: "Full sentences with natural flow",
+    icon: AlignLeft,
+    level: "All",
+  },
+  {
+    id: "paragraphs",
+    title: "Paragraphs",
+    desc: "Long-form typing endurance",
+    icon: AlignLeft,
+    level: "Advanced",
+  },
+  {
+    id: "code",
+    title: "Programming Code",
+    desc: "JS, Python, HTML, CSS, and SQL",
+    icon: Code2,
+    level: "Advanced",
+  },
 ];
+
+const levelStyles: Record<
+  Level,
+  { badge: string; iconWrap: string; accent: string }
+> = {
+  Beginner: {
+    badge:
+      "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 ring-1 ring-inset ring-emerald-500/20",
+    iconWrap:
+      "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 ring-1 ring-inset ring-emerald-500/15",
+    accent: "group-hover:border-emerald-500/30 group-hover:shadow-emerald-500/5",
+  },
+  Intermediate: {
+    badge:
+      "bg-sky-500/10 text-sky-600 dark:text-sky-400 ring-1 ring-inset ring-sky-500/20",
+    iconWrap:
+      "bg-sky-500/10 text-sky-600 dark:text-sky-400 ring-1 ring-inset ring-sky-500/15",
+    accent: "group-hover:border-sky-500/30 group-hover:shadow-sky-500/5",
+  },
+  All: {
+    badge:
+      "bg-zinc-500/10 text-zinc-600 dark:text-zinc-300 ring-1 ring-inset ring-zinc-500/20",
+    iconWrap:
+      "bg-zinc-500/10 text-zinc-600 dark:text-zinc-300 ring-1 ring-inset ring-zinc-500/15",
+    accent: "group-hover:border-zinc-400/30 group-hover:shadow-zinc-500/5",
+  },
+  Advanced: {
+    badge:
+      "bg-violet-500/10 text-violet-600 dark:text-violet-400 ring-1 ring-inset ring-violet-500/20",
+    iconWrap:
+      "bg-violet-500/10 text-violet-600 dark:text-violet-400 ring-1 ring-inset ring-violet-500/15",
+    accent: "group-hover:border-violet-500/30 group-hover:shadow-violet-500/5",
+  },
+};
+
+const levelOrder: Level[] = ["Beginner", "Intermediate", "All", "Advanced"];
 
 export default function LearnPage() {
   return (
-    <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6">
-      <div className="mb-12 text-center">
-        <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
-          Learn Typing
-        </h1>
-        <p className="mt-2 text-zinc-500 max-w-xl mx-auto">
-          Structured path from home row to full keyboard and programming languages.
+    <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:py-16">
+      {/* Header */}
+      <div className="mb-10 max-w-2xl sm:mb-14">
+        <p className="mb-3 text-xs font-medium uppercase tracking-[0.14em] text-zinc-500">
+          Curriculum
         </p>
+        <h1 className="text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-4xl">
+          Learn typing
+        </h1>
+        <p className="mt-3 text-[15px] leading-relaxed text-zinc-500 dark:text-zinc-400">
+          A structured path from home row basics to full keyboard fluency and
+          code typing. Choose a lesson to begin.
+        </p>
+
+        {/* Level legend — clean chips */}
+        <div className="mt-6 flex flex-wrap items-center gap-2">
+          {levelOrder.map((level) => (
+            <span
+              key={level}
+              className={cn(
+                "inline-flex items-center rounded-md px-2.5 py-1 text-xs font-medium",
+                levelStyles[level].badge
+              )}
+            >
+              {level}
+            </span>
+          ))}
+        </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {lessons.map((lesson, i) => {
+      {/* Lesson grid */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 sm:gap-4">
+        {lessons.map((lesson) => {
           const Icon = lesson.icon;
+          const styles = levelStyles[lesson.level];
+
           return (
-            <div
+            <Link
               key={lesson.id}
-             
-             
-             
+              href={`/practice?lesson=${lesson.id}`}
+              className={cn(
+                "group relative flex h-full flex-col rounded-xl border border-zinc-200/80 bg-white p-5 shadow-sm transition-all duration-200",
+                "dark:border-white/[0.08] dark:bg-zinc-900/60 dark:shadow-none",
+                "hover:-translate-y-0.5 hover:shadow-md dark:hover:bg-zinc-900/90",
+                styles.accent
+              )}
             >
-              <Link
-                href={`/practice?lesson=${lesson.id}`}
-                className="glass group flex flex-col rounded-2xl p-6 transition-all hover:border-blue-500/40 hover:bg-white/10 h-full"
-              >
-                <div className={`mb-4 inline-flex w-fit rounded-xl bg-gradient-to-br ${lesson.color} p-3 text-white shadow-lg`}>
-                  <Icon className="h-5 w-5" />
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div
+                  className={cn(
+                    "inline-flex h-10 w-10 items-center justify-center rounded-lg",
+                    styles.iconWrap
+                  )}
+                >
+                  <Icon className="h-4.5 w-4.5 h-[18px] w-[18px]" strokeWidth={1.75} />
                 </div>
-                <div className="flex items-center justify-between">
-                  <h3 className="font-semibold text-lg">{lesson.title}</h3>
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400">
-                    {lesson.level}
-                  </span>
-                </div>
-                <p className="mt-2 text-sm text-zinc-500 flex-1">{lesson.desc}</p>
-                <div className="mt-4 flex items-center text-sm text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity">
-                  Start lesson <ArrowRight className="ml-1 h-4 w-4" />
-                </div>
-              </Link>
-            </div>
+                <span
+                  className={cn(
+                    "inline-flex shrink-0 items-center rounded-md px-2 py-0.5 text-[11px] font-medium tracking-wide",
+                    styles.badge
+                  )}
+                >
+                  {lesson.level}
+                </span>
+              </div>
+
+              <h3 className="text-[15px] font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+                {lesson.title}
+              </h3>
+              <p className="mt-1.5 flex-1 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
+                {lesson.desc}
+              </p>
+
+              <div className="mt-5 flex items-center gap-1.5 text-sm font-medium text-zinc-400 transition-colors group-hover:text-blue-600 dark:group-hover:text-blue-400">
+                Start lesson
+                <ArrowRight className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
+              </div>
+            </Link>
           );
         })}
       </div>

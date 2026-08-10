@@ -1,30 +1,13 @@
 import { supabase } from "@/lib/supabase";
+import { getOrCreateVisitorId } from "@/lib/guestIdentity";
 
 const VISIT_SESSION_KEY = "bullettype-visit-recorded-v2";
-const VISITOR_KEY = "bullettype-visitor-id";
 
 /** Start of local calendar day as ISO string */
 function startOfLocalDayISO() {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
   return d.toISOString();
-}
-
-function getVisitorId(): string {
-  if (typeof window === "undefined") return "server";
-  try {
-    let id = localStorage.getItem(VISITOR_KEY);
-    if (!id) {
-      id =
-        typeof crypto !== "undefined" && "randomUUID" in crypto
-          ? crypto.randomUUID()
-          : `v-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      localStorage.setItem(VISITOR_KEY, id);
-    }
-    return id;
-  } catch {
-    return `tmp-${Date.now()}`;
-  }
 }
 
 /**
@@ -35,7 +18,7 @@ function getVisitorId(): string {
 export async function recordSiteVisit(userId?: string | null): Promise<void> {
   if (typeof window === "undefined") return;
 
-  const visitorId = getVisitorId();
+  const visitorId = getOrCreateVisitorId();
   const sessionTag = userId ? `user:${userId}` : `guest:${visitorId}`;
   const now = new Date().toISOString();
 

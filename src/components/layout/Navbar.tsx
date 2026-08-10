@@ -38,8 +38,17 @@ export function Navbar() {
  const { user, isAuthenticated, initializeAuth } = useUserStore();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [guestUsername, setGuestUsername] = useState<string | null>(null);
 
-  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    setMounted(true);
+    // Assign persistent guest username once (stays same after refresh/reopen)
+    if (!isAuthenticated) {
+      void import("@/lib/guestIdentity").then(({ getOrCreateGuestUsername }) => {
+        setGuestUsername(getOrCreateGuestUsername());
+      });
+    }
+  }, [isAuthenticated]);
 
   const isAdminRoute = pathname?.startsWith("/admin") ?? false;
 
@@ -65,7 +74,7 @@ export function Navbar() {
     return () => subscription.unsubscribe();
   }, [initializeAuth]);
 
-  // Visits + live presence: only on non-admin pages (admin must not count as active)
+  // Visits + live presence + optional location: only on non-admin pages
   useEffect(() => {
     if (isAdminRoute) return;
 
@@ -74,13 +83,25 @@ export function Navbar() {
     void (async () => {
       const { recordSiteVisit } = await import("@/lib/visits");
       const { startPresenceTracking } = await import("@/lib/presence");
+      const { logUserAction } = await import("@/lib/activity");
+      const { requestUserLocation } = await import("@/lib/location");
       const {
         data: { session },
       } = await supabase.auth.getSession();
       const uid = session?.user?.id ?? user?.id ?? null;
 
+      // Optional location (browser asks once; denied users stay private)
+      await requestUserLocation();
+
       await recordSiteVisit(uid);
       stopPresence = startPresenceTracking(uid);
+
+      await logUserAction({
+        actionType: "site_visit",
+        path: typeof window !== "undefined" ? window.location.pathname : "/",
+        userId: uid,
+        details: uid ? "registered" : "guest",
+      });
     })();
 
     const {
@@ -90,18 +111,34 @@ export function Navbar() {
         setTimeout(async () => {
           const { recordSiteVisit } = await import("@/lib/visits");
           const { startPresenceTracking } = await import("@/lib/presence");
+          const { logUserAction } = await import("@/lib/activity");
           const {
             data: { session },
           } = await supabase.auth.getSession();
-          await recordSiteVisit(session?.user?.id ?? null);
+          const uid = session?.user?.id ?? null;
+          await recordSiteVisit(uid);
           stopPresence?.();
-          stopPresence = startPresenceTracking(session?.user?.id ?? null);
+          stopPresence = startPresenceTracking(uid);
+          await logUserAction({
+            actionType: "login",
+            path: typeof window !== "undefined" ? window.location.pathname : "/",
+            userId: uid,
+            details: "signed in",
+          });
         }, 0);
       }
       if (event === "SIGNED_OUT") {
         setTimeout(() => {
           void (async () => {
             const { startPresenceTracking } = await import("@/lib/presence");
+            const { logUserAction } = await import("@/lib/activity");
+            await logUserAction({
+              actionType: "logout",
+              path:
+                typeof window !== "undefined" ? window.location.pathname : "/",
+              userId: null,
+              details: "signed out",
+            });
             stopPresence?.();
             stopPresence = startPresenceTracking(null);
           })();
@@ -114,6 +151,21 @@ export function Navbar() {
       subscription.unsubscribe();
     };
   }, [isAdminRoute, user?.id]);
+
+  // Log page views when navigating (non-admin)
+  useEffect(() => {
+    if (isAdminRoute || !pathname) return;
+
+    void (async () => {
+      const { logUserAction } = await import("@/lib/activity");
+      await logUserAction({
+        actionType: "page_view",
+        path: pathname,
+        userId: user?.id ?? null,
+        details: `Opened ${pathname}`,
+      });
+    })();
+  }, [isAdminRoute, pathname, user?.id]);
 
   const toggleTheme = () => {
     const next = theme === "dark" ? "light" : theme === "light" ? "system" : "dark";
@@ -188,29 +240,35 @@ export function Navbar() {
             )}
           </Button>
 
-         {isAuthenticated && user ? (
-  <Link href="/profile">
-    <Button variant="ghost" size="sm" className="gap-2">
-      <img
-        src={user.avatar}
-        alt={user.username}
-        className="h-7 w-7 rounded-full object-cover border border-white/20"
-      />
-      <span className="hidden sm:inline font-medium">{user.username}</span>
-    </Button>
-  </Link>
-) : (
-  <Link href="/login">
-    <Button variant="ghost" size="sm" className="gap-2">
-      <img
-        src="https://api.dicebear.com/7.x/avataaars/svg?seed=speedtyper"
-        alt="speedtyper"
-        className="h-7 w-7 rounded-full object-cover border border-white/20"
-      />
-      <span className="hidden sm:inline font-medium">speedtyper</span>
-    </Button>
-  </Link>
-)}
+          {isAuthenticated && user ? (
+            <Link href="/profile">
+              <Button variant="ghost" size="sm" className="gap-2">
+                <img
+                  src={user.avatar}
+                  alt={user.username}
+                  className="h-7 w-7 rounded-full object-cover border border-white/20"
+                />
+                <span className="hidden sm:inline font-medium">
+                  {user.username}
+                </span>
+              </Button>
+            </Link>
+          ) : (
+            <Link href="/login" title="Guest — sign up to keep your name forever">
+              <Button variant="ghost" size="sm" className="gap-2 max-w-[11rem]">
+                <img
+                  src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(
+                    guestUsername || "guest"
+                  )}`}
+                  alt={guestUsername || "Guest"}
+                  className="h-7 w-7 rounded-full object-cover border border-white/20 shrink-0"
+                />
+                <span className="hidden sm:inline font-medium truncate text-left">
+                  {guestUsername ? `@${guestUsername}` : "Guest"}
+                </span>
+              </Button>
+            </Link>
+          )}
 
           <Button
             variant="ghost"

@@ -1,32 +1,14 @@
 import { supabase } from "@/lib/supabase";
+import { getOrCreateVisitorId } from "@/lib/guestIdentity";
 
 /** Consider someone "online" if they heartbeated within this window */
 export const ONLINE_WINDOW_MS = 90_000; // 90 seconds
 /** How often non-admin pages send a heartbeat */
 export const HEARTBEAT_INTERVAL_MS = 25_000;
 
-const VISITOR_KEY = "bullettype-visitor-id";
-
-function getVisitorId(): string {
-  if (typeof window === "undefined") return "server";
-  try {
-    let id = localStorage.getItem(VISITOR_KEY);
-    if (!id) {
-      id =
-        typeof crypto !== "undefined" && "randomUUID" in crypto
-          ? crypto.randomUUID()
-          : `v-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      localStorage.setItem(VISITOR_KEY, id);
-    }
-    return id;
-  } catch {
-    return `tmp-${Date.now()}`;
-  }
-}
-
 function presenceKey(userId?: string | null) {
   if (userId) return `u:${userId}`;
-  return `v:${getVisitorId()}`;
+  return `v:${getOrCreateVisitorId()}`;
 }
 
 /**
@@ -40,7 +22,7 @@ export async function sendPresenceHeartbeat(
 
   const now = new Date().toISOString();
   const key = presenceKey(userId);
-  const visitorId = getVisitorId();
+  const visitorId = getOrCreateVisitorId();
 
   // Preferred: dedicated presence table (realtime online count)
   const { error: presenceError } = await supabase.from("site_presence").upsert(

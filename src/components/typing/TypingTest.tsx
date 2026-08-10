@@ -244,6 +244,16 @@ export function TypingTest({
 
     addTestResult(result);
     onComplete?.(result);
+
+    // Admin Recent Actions history (guest or registered)
+    void import("@/lib/activity").then(({ logUserAction }) =>
+      logUserAction({
+        actionType: "test_complete",
+        details: `${result.wpm} WPM · ${result.accuracy}% · ${mode}`,
+        path:
+          typeof window !== "undefined" ? window.location.pathname : "/practice",
+      })
+    );
   }, [mode, addTestResult, onComplete]);
 
   // Timer countdown
