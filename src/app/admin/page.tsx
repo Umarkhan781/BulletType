@@ -13,6 +13,7 @@ import {
   TrendingUp,
   UserCheck,
   AlertTriangle,
+  UserRound,
 } from "lucide-react";
 
 interface Result {
@@ -32,36 +33,82 @@ interface AdminStats {
   totalUsers: number;
   visitsLast30Days: number;
   visitsLast12Months: number;
+  uniqueVisitorsLast30Days: number;
+  uniqueVisitorsLast12Months: number;
   activeUsers: number;
 }
 
-async function countVisitsSince(sinceISO: string): Promise<{
-  count: number;
+type VisitRow = {
+  user_id?: string | null;
+  visitor_id?: string | null;
+};
+
+/** One key per person: prefer logged-in user_id, else browser visitor_id */
+function personKey(row: VisitRow): string | null {
+  if (row.user_id) return `u:${row.user_id}`;
+  if (row.visitor_id) return `v:${row.visitor_id}`;
+  return null;
+}
+
+function countUniquePersons(rows: VisitRow[]): number {
+  const keys = new Set<string>();
+  for (const row of rows) {
+    const key = personKey(row);
+    if (key) keys.add(key);
+  }
+  return keys.size;
+}
+
+async function fetchVisitRowsSince(sinceISO: string): Promise<{
+  rows: VisitRow[];
+  totalCount: number;
   error?: string;
 }> {
-  const visits = await supabase
+  // Prefer visited_at; fall back to created_at if needed
+  let query = await supabase
+    .from("user_visits")
+    .select("user_id, visitor_id")
+    .gte("visited_at", sinceISO)
+    .limit(10000);
+
+  if (query.error) {
+    query = await supabase
+      .from("user_visits")
+      .select("user_id, visitor_id")
+      .gte("created_at", sinceISO)
+      .limit(10000);
+  }
+
+  if (query.error) {
+    return {
+      rows: [],
+      totalCount: 0,
+      error: query.error.message || "user_visits unavailable",
+    };
+  }
+
+  const rows = (query.data || []) as VisitRow[];
+
+  // Exact total row count (may be higher than limit used for unique set)
+  let totalCount = rows.length;
+  const head = await supabase
     .from("user_visits")
     .select("*", { count: "exact", head: true })
     .gte("visited_at", sinceISO);
 
-  if (!visits.error) {
-    return { count: visits.count || 0 };
+  if (!head.error && typeof head.count === "number") {
+    totalCount = head.count;
+  } else {
+    const altHead = await supabase
+      .from("user_visits")
+      .select("*", { count: "exact", head: true })
+      .gte("created_at", sinceISO);
+    if (!altHead.error && typeof altHead.count === "number") {
+      totalCount = altHead.count;
+    }
   }
 
-  // Fallback column name
-  const alt = await supabase
-    .from("user_visits")
-    .select("*", { count: "exact", head: true })
-    .gte("created_at", sinceISO);
-
-  if (!alt.error) {
-    return { count: alt.count || 0 };
-  }
-
-  return {
-    count: 0,
-    error: visits.error.message || alt.error?.message || "user_visits unavailable",
-  };
+  return { rows, totalCount };
 }
 
 async function countActiveUsers(): Promise<number> {
@@ -76,19 +123,9 @@ async function countActiveUsers(): Promise<number> {
     return bySeen.count;
   }
 
-  const byVisits = await supabase
-    .from("user_visits")
-    .select("user_id, visitor_id")
-    .gte("visited_at", since)
-    .limit(5000);
-
-  if (!byVisits.error && byVisits.data) {
-    const keys = new Set<string>();
-    for (const row of byVisits.data) {
-      if (row.user_id) keys.add(`u:${row.user_id}`);
-      else if (row.visitor_id) keys.add(`v:${row.visitor_id}`);
-    }
-    return keys.size;
+  const byVisits = await fetchVisitRowsSince(since);
+  if (!byVisits.error && byVisits.rows.length) {
+    return countUniquePersons(byVisits.rows);
   }
 
   const byResults = await supabase
@@ -114,6 +151,8 @@ export default function AdminPage() {
     totalUsers: 0,
     visitsLast30Days: 0,
     visitsLast12Months: 0,
+    uniqueVisitorsLast30Days: 0,
+    uniqueVisitorsLast12Months: 0,
     activeUsers: 0,
   });
 
@@ -133,8 +172,8 @@ export default function AdminPage() {
         .select("*", { count: "exact", head: true });
 
       const [v30, v12, activeUsers] = await Promise.all([
-        countVisitsSince(daysAgoISO(30)),
-        countVisitsSince(monthsAgoISO(12)),
+        fetchVisitRowsSince(daysAgoISO(30)),
+        fetchVisitRowsSince(monthsAgoISO(12)),
         countActiveUsers(),
       ]);
 
@@ -161,8 +200,10 @@ export default function AdminPage() {
         averageWpm,
         highestWpm,
         totalUsers: userCount || 0,
-        visitsLast30Days: v30.count,
-        visitsLast12Months: v12.count,
+        visitsLast30Days: v30.totalCount,
+        visitsLast12Months: v12.totalCount,
+        uniqueVisitorsLast30Days: countUniquePersons(v30.rows),
+        uniqueVisitorsLast12Months: countUniquePersons(v12.rows),
         activeUsers,
       });
 
@@ -213,14 +254,28 @@ export default function AdminPage() {
       value: stats.visitsLast30Days,
       icon: CalendarDays,
       color: "text-cyan-400",
-      hint: "Site visits in the past 30 days (guest + logged-in)",
+      hint: "Total visit records (same person can appear more than once)",
+    },
+    {
+      label: "Unique Visitors (30 Days)",
+      value: stats.uniqueVisitorsLast30Days,
+      icon: UserRound,
+      color: "text-teal-400",
+      hint: "Different people only — same person counted once",
     },
     {
       label: "Visits (Last 12 Months)",
       value: stats.visitsLast12Months,
       icon: CalendarRange,
       color: "text-sky-400",
-      hint: "Site visits in the past 12 months",
+      hint: "Total visit records in the past 12 months",
+    },
+    {
+      label: "Unique Visitors (12 Months)",
+      value: stats.uniqueVisitorsLast12Months,
+      icon: Users,
+      color: "text-indigo-400",
+      hint: "Different people only — same person counted once",
     },
     {
       label: "Active Users",
@@ -281,7 +336,7 @@ export default function AdminPage() {
         <Target className="h-5 w-5 text-blue-400" />
         User visits & activity
       </h2>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-10">
         {trafficCards.map((card) => {
           const Icon = card.icon;
           return (
