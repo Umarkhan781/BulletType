@@ -30,30 +30,33 @@ function getVisitorId(): string {
 /**
  * Record a site visit once per browser tab session.
  * Works for logged-in and guest users (mobile included).
- * Updates profiles.last_seen_at when userId is present.
+ * Always refreshes profiles.last_seen_at for logged-in users (active users metric).
  */
 export async function recordSiteVisit(userId?: string | null): Promise<void> {
   if (typeof window === "undefined") return;
 
   const visitorId = getVisitorId();
   const sessionTag = userId ? `user:${userId}` : `guest:${visitorId}`;
+  const now = new Date().toISOString();
 
+  // Active-user heartbeat: always update when logged in (even if visit already logged)
+  if (userId) {
+    const { error: seenError } = await supabase
+      .from("profiles")
+      .update({ last_seen_at: now })
+      .eq("id", userId);
+    if (seenError) {
+      console.warn("[visits] last_seen_at update failed:", seenError.message);
+    }
+  }
+
+  // Skip re-inserting a visit row if this tab session already recorded one
   try {
     if (sessionStorage.getItem(VISIT_SESSION_KEY) === sessionTag) {
       return;
     }
   } catch {
     // private mode may block sessionStorage
-  }
-
-  const now = new Date().toISOString();
-
-  // Active user heartbeat
-  if (userId) {
-    await supabase
-      .from("profiles")
-      .update({ last_seen_at: now })
-      .eq("id", userId);
   }
 
   // Avoid duplicate daily row for same visitor (best-effort)

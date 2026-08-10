@@ -308,7 +308,10 @@ export function TypingTest({
       wpmHistory: [],
     };
     generateWords();
-    inputRef.current?.focus();
+    // Focus after restart (also covered by status effect; call immediately too)
+    requestAnimationFrame(() => {
+      inputRef.current?.focus({ preventScroll: true });
+    });
   };
 
   const ensureStarted = () => {
@@ -367,6 +370,95 @@ export function TypingTest({
     }
   };
 
+  const focusInput = useCallback((opts?: { preventScroll?: boolean }) => {
+    const el = inputRef.current;
+    if (!el || el.disabled) return;
+    try {
+      el.focus({ preventScroll: opts?.preventScroll ?? true });
+    } catch {
+      el.focus();
+    }
+  }, []);
+
+  /** Apply typed string (shared by input onChange and global first-key capture) */
+  const applyTypedValue = useCallback(
+    (value: string) => {
+      if (statusRef.current === "finished" || finishedRef.current) return;
+
+      const list = wordsRef.current;
+      const wordIndex = countersRef.current.currentWordIndex;
+      const currentWord = list[wordIndex] || "";
+
+      ensureStarted();
+
+      // Space → complete word
+      if (value.endsWith(" ")) {
+        completeWord(value.trimEnd());
+        return;
+      }
+
+      // Miss key: user pressed a wrong key (new character that does not match)
+      const prevInput = countersRef.current.input;
+      if (value.length > prevInput.length) {
+        const added = value.slice(prevInput.length);
+        for (let i = 0; i < added.length; i++) {
+          const pos = prevInput.length + i;
+          const expected = currentWord[pos];
+          if (expected === undefined || added[i] !== expected) {
+            const nextMiss = countersRef.current.missKeys + 1;
+            syncCounters({ missKeys: nextMiss });
+            setMissKeys(nextMiss);
+          }
+        }
+      }
+
+      setInput(value);
+      setCurrentCharIndex(value.length);
+      syncCounters({ input: value });
+
+      // Auto-finish: last word typed completely
+      if (
+        wordIndex === list.length - 1 &&
+        list.length > 0 &&
+        value === currentWord &&
+        currentWord.length > 0
+      ) {
+        const nextHistory = [...countersRef.current.typedHistory, value];
+        const nextCorrect =
+          countersRef.current.correctChars + currentWord.length;
+        const nextTotal = countersRef.current.totalChars + currentWord.length;
+
+        syncCounters({
+          typedHistory: nextHistory,
+          correctChars: nextCorrect,
+          totalChars: nextTotal,
+          currentWordIndex: list.length,
+          input: "",
+        });
+
+        setTypedHistory(nextHistory);
+        setCorrectChars(nextCorrect);
+        setTotalChars(nextTotal);
+        setCurrentWordIndex(list.length);
+        setInput("");
+        setCurrentCharIndex(0);
+        finishTest();
+      }
+    },
+    // completeWord is stable enough via refs; finishTest is memoized
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [finishTest, syncCounters]
+  );
+
+  const applyTypedValueRef = useRef(applyTypedValue);
+  useEffect(() => {
+    applyTypedValueRef.current = applyTypedValue;
+  }, [applyTypedValue]);
+
+  // Keep latest completeWord for global key handler (avoids stale closures)
+  const completeWordRef = useRef(completeWord);
+  completeWordRef.current = completeWord;
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (status === "finished" || finishedRef.current) {
       e.preventDefault();
@@ -405,76 +497,113 @@ export function TypingTest({
   };
 
   const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (status === "finished" || finishedRef.current) return;
-
-    const value = e.target.value;
-    const list = wordsRef.current;
-    const wordIndex = countersRef.current.currentWordIndex;
-    const currentWord = list[wordIndex] || "";
-
-    ensureStarted();
-
-    // Space → complete word
-    if (value.endsWith(" ")) {
-      completeWord(value.trimEnd());
-      return;
-    }
-
-    // Miss key: user pressed a wrong key (new character that does not match)
-    const prevInput = countersRef.current.input;
-    if (value.length > prevInput.length) {
-      const added = value.slice(prevInput.length);
-      for (let i = 0; i < added.length; i++) {
-        const pos = prevInput.length + i;
-        const expected = currentWord[pos];
-        // Wrong key, or typed past the end of the word
-        if (expected === undefined || added[i] !== expected) {
-          const nextMiss = countersRef.current.missKeys + 1;
-          syncCounters({ missKeys: nextMiss });
-          setMissKeys(nextMiss);
-        }
-      }
-    }
-
-    // Character level
-    setInput(value);
-    setCurrentCharIndex(value.length);
-    syncCounters({ input: value });
-
-    // Auto-finish: last word typed completely (last letter / digit / punctuation)
-    if (
-      wordIndex === list.length - 1 &&
-      list.length > 0 &&
-      value === currentWord &&
-      currentWord.length > 0
-    ) {
-      // Count this last word as completed (no trailing space)
-      const nextHistory = [...countersRef.current.typedHistory, value];
-      const nextCorrect =
-        countersRef.current.correctChars + currentWord.length;
-      const nextTotal = countersRef.current.totalChars + currentWord.length;
-
-      syncCounters({
-        typedHistory: nextHistory,
-        correctChars: nextCorrect,
-        totalChars: nextTotal,
-        currentWordIndex: list.length,
-        input: "",
-      });
-
-      setTypedHistory(nextHistory);
-      setCorrectChars(nextCorrect);
-      setTotalChars(nextTotal);
-      setCurrentWordIndex(list.length);
-      setInput("");
-      setCurrentCharIndex(0);
-      finishTest();
-    }
+    applyTypedValue(e.target.value);
   };
 
+  // Keep caret in the hidden input after mount, status change, restart, word count change
   useEffect(() => {
-    inputRef.current?.focus();
-  }, [status]);
+    if (status === "finished") return;
+    focusInput();
+    const t0 = window.setTimeout(() => focusInput(), 0);
+    const t1 = window.setTimeout(() => focusInput(), 50);
+    const t2 = window.setTimeout(() => focusInput(), 120);
+    return () => {
+      window.clearTimeout(t0);
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
+  }, [status, wordCount, mode, customText, focusInput]);
+
+  // Any keyboard key starts / continues the test without clicking the text box
+  // (e.g. after choosing 10/20 words the button keeps focus — we steal typing keys)
+  useEffect(() => {
+    const isOtherEditable = (target: EventTarget | null) => {
+      if (!(target instanceof HTMLElement)) return false;
+      if (target === inputRef.current) return false;
+      const tag = target.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+      if (target.isContentEditable) return true;
+      return false;
+    };
+
+    const onWindowKeyDown = (e: KeyboardEvent) => {
+      if (finishedRef.current || statusRef.current === "finished") return;
+      if (isOtherEditable(e.target)) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+      const key = e.key;
+      if (
+        key === "Tab" ||
+        key === "Escape" ||
+        key === "Shift" ||
+        key === "Control" ||
+        key === "Alt" ||
+        key === "Meta" ||
+        key === "CapsLock" ||
+        key === "ArrowLeft" ||
+        key === "ArrowRight" ||
+        key === "ArrowUp" ||
+        key === "ArrowDown" ||
+        key === "Home" ||
+        key === "End" ||
+        key === "PageUp" ||
+        key === "PageDown"
+      ) {
+        return;
+      }
+
+      const inputEl = inputRef.current;
+      if (!inputEl || inputEl.disabled) return;
+
+      const alreadyFocused = document.activeElement === inputEl;
+
+      // If focus is already on our input, let the native input handlers run
+      if (alreadyFocused) return;
+
+      // Redirect typing from buttons / page body into the test
+      if (key === "Backspace") {
+        e.preventDefault();
+        e.stopPropagation();
+        focusInput();
+        setBackspaces((b) => {
+          const next = b + 1;
+          syncCounters({ backspaces: next });
+          return next;
+        });
+        const prev = countersRef.current.input;
+        if (prev.length > 0) {
+          applyTypedValueRef.current(prev.slice(0, -1));
+        }
+        return;
+      }
+
+      if (key === "Enter") {
+        e.preventDefault();
+        e.stopPropagation();
+        focusInput();
+        ensureStarted();
+        const typedWord = countersRef.current.input.trim();
+        if (
+          typedWord.length === 0 &&
+          countersRef.current.currentWordIndex === 0
+        ) {
+          return;
+        }
+        completeWordRef.current(typedWord);
+        return;
+      }
+
+      if (key.length === 1) {
+        e.preventDefault();
+        e.stopPropagation();
+        focusInput();
+        applyTypedValueRef.current(countersRef.current.input + key);
+      }
+    };
+
+    window.addEventListener("keydown", onWindowKeyDown, true);
+    return () => window.removeEventListener("keydown", onWindowKeyDown, true);
+  }, [focusInput, syncCounters]);
 
   // When the test ends, scroll results into view
   useEffect(() => {
@@ -649,7 +778,14 @@ export function TypingTest({
 
       <div
         ref={containerRef}
-        onClick={() => inputRef.current?.focus()}
+        onClick={() => focusInput({ preventScroll: false })}
+        onMouseDown={(e) => {
+          // Keep focus on the typing input even when clicking labels around it
+          if (e.target !== inputRef.current) {
+            e.preventDefault();
+            focusInput({ preventScroll: true });
+          }
+        }}
         className={cn(
           "relative rounded-2xl border border-white/10 bg-white/5 dark:bg-zinc-900/50 backdrop-blur-xl p-8 min-h-[180px] cursor-text transition-all",
           status === "idle" && "hover:border-blue-500/30"
@@ -677,15 +813,17 @@ export function TypingTest({
           autoCorrect="off"
           autoCapitalize="off"
           spellCheck={false}
+          autoFocus
           disabled={status === "finished"}
           inputMode="text"
           enterKeyHint="done"
+          aria-label="Typing test input"
         />
 
         {status === "idle" && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <p className="text-zinc-500 text-sm bg-zinc-900/80 px-4 py-2 rounded-full backdrop-blur">
-              Click here or start typing to begin
+              Start typing to begin
             </p>
           </div>
         )}

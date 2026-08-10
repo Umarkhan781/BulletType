@@ -111,33 +111,50 @@ async function fetchVisitRowsSince(sinceISO: string): Promise<{
   return { rows, totalCount };
 }
 
+/**
+ * Unique people active in the last 7 days.
+ * Merges: profiles.last_seen_at + user_visits + results (does not stop at 0).
+ */
 async function countActiveUsers(): Promise<number> {
   const since = daysAgoISO(7);
+  const keys = new Set<string>();
 
+  // 1) Logged-in users with a recent last_seen_at heartbeat
   const bySeen = await supabase
     .from("profiles")
-    .select("*", { count: "exact", head: true })
-    .gte("last_seen_at", since);
+    .select("id")
+    .gte("last_seen_at", since)
+    .limit(5000);
 
-  if (!bySeen.error && typeof bySeen.count === "number") {
-    return bySeen.count;
+  if (!bySeen.error && bySeen.data) {
+    for (const row of bySeen.data) {
+      if (row.id) keys.add(`u:${String(row.id)}`);
+    }
   }
 
+  // 2) Anyone who opened the site (guest visitor_id or logged-in user_id)
   const byVisits = await fetchVisitRowsSince(since);
-  if (!byVisits.error && byVisits.rows.length) {
-    return countUniquePersons(byVisits.rows);
+  if (!byVisits.error) {
+    for (const row of byVisits.rows) {
+      const key = personKey(row);
+      if (key) keys.add(key);
+    }
   }
 
+  // 3) Users who completed a test recently
   const byResults = await supabase
     .from("results")
     .select("user_id")
-    .gte("created_at", since);
+    .gte("created_at", since)
+    .limit(5000);
 
   if (!byResults.error && byResults.data) {
-    return new Set(byResults.data.map((r) => r.user_id).filter(Boolean)).size;
+    for (const row of byResults.data) {
+      if (row.user_id) keys.add(`u:${String(row.user_id)}`);
+    }
   }
 
-  return 0;
+  return keys.size;
 }
 
 export default function AdminPage() {
@@ -282,7 +299,8 @@ export default function AdminPage() {
       value: stats.activeUsers,
       icon: UserCheck,
       color: "text-emerald-400",
-      hint: "Users active in the last 7 days",
+      hint:
+        "Unique people active in the last 7 days (visits + logged-in last seen + tests)",
     },
   ];
 

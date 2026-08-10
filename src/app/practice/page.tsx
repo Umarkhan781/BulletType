@@ -55,7 +55,11 @@ function PracticeContent() {
               type="button"
               size="sm"
               variant={selected === count ? "default" : "outline"}
-              onClick={() => setSelected(count)}
+              onClick={(e) => {
+                setSelected(count);
+                // Release focus so typing keys go to the test immediately
+                e.currentTarget.blur();
+              }}
               className={cn(selected === count && "shadow-md")}
             >
               {count} words
@@ -65,7 +69,12 @@ function PracticeContent() {
             type="button"
             size="sm"
             variant={selected === "custom" ? "default" : "outline"}
-            onClick={() => setSelected("custom")}
+            onClick={(e) => {
+              setSelected("custom");
+              // Keep focus only when opening custom field; typing test still
+              // captures keys when custom input is not focused
+              e.currentTarget.blur();
+            }}
           >
             Custom
           </Button>
@@ -91,7 +100,7 @@ function PracticeContent() {
 
         <p className="text-xs text-zinc-500">
           Active: <span className="font-mono text-blue-400">{wordCount}</span>{" "}
-          words
+          words — start typing anytime (no need to click the box)
         </p>
       </div>
 
