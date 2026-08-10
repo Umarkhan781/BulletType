@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 // motion optional
-import { Trophy, Medal } from "lucide-react";
+import { Medal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -25,15 +25,7 @@ export default function LeaderboardPage() {
   const [filter, setFilter] = useState<(typeof filters)[number]>("All-Time");
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-12 sm:px-6">
-      <div className="mb-10 text-center">
-        <h1 className="text-3xl font-bold tracking-tight sm:text-4xl flex items-center justify-center gap-3">
-          <Trophy className="h-8 w-8 text-amber-400" />
-          Leaderboard
-        </h1>
-        <p className="mt-2 text-zinc-500">Top typists from around the world</p>
-      </div>
-
+    <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-10">
       <div className="flex justify-center gap-2 mb-8">
         {filters.map((f) => (
           <Button

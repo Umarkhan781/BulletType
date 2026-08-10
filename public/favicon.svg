@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <text x="16" y="24.5" text-anchor="middle"
+    font-family="Segoe UI, system-ui, Arial, Helvetica, sans-serif"
+    font-size="24" font-weight="700"
+    fill="#2563eb" stroke="#1d4ed8" stroke-width="1.1"
+    paint-order="stroke fill" stroke-linejoin="miter">BT</text>
+</svg>

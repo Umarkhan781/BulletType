@@ -83,3 +83,32 @@ body {
 ::selection {
   background: rgba(59, 130, 246, 0.3);
 }
+
+/* Fast blinking narrow typing caret */
+@keyframes typing-caret-blink {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.typing-caret {
+  display: inline-block;
+  width: 1.5px;
+  height: 1.05em;
+  margin-left: 0;
+  margin-right: 1px;
+  vertical-align: text-bottom;
+  background-color: #3b82f6;
+  border-radius: 1px;
+  animation: typing-caret-blink 0.7s step-end infinite;
+  pointer-events: none;
+}
+
+.dark .typing-caret {
+  background-color: #60a5fa;
+}

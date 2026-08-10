@@ -66,7 +66,16 @@ export const metadata: Metadata = {
     },
   },
   icons: {
-    icon: "/favicon.ico",
+    // ?v=bt2 busts browser cache of the old keyboard photo favicon
+    icon: [
+      { url: "/favicon.svg?v=bt2", type: "image/svg+xml" },
+      { url: "/favicon-32.png?v=bt2", sizes: "32x32", type: "image/png" },
+      { url: "/icon-192.png?v=bt2", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png?v=bt2", sizes: "512x512", type: "image/png" },
+      { url: "/favicon.ico?v=bt2", sizes: "any" },
+    ],
+    apple: [{ url: "/apple-icon.png?v=bt2", sizes: "180x180", type: "image/png" }],
+    shortcut: "/favicon-32.png?v=bt2",
   },
 };
 
@@ -103,8 +112,14 @@ export default function RootLayout({
     },
   };
 
+  // Inline boot script as string for beforeInteractive-free dark default
+  const themeBoot = `(function(){try{var d=document.documentElement;d.classList.add("dark");var raw=localStorage.getItem("typing-master-settings");if(!raw)return;var p=JSON.parse(raw);var t=(p&&p.state&&p.state.theme)||"dark";if(t==="light")d.classList.remove("dark");else d.classList.add("dark");}catch(e){document.documentElement.classList.add("dark");}})();`;
+
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className="dark" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeBoot }} />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} min-h-screen flex flex-col antialiased bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50`}
       >

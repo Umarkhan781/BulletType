@@ -346,12 +346,7 @@ export default function AdminPage() {
   ];
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-12">
-      <h1 className="text-3xl font-bold mb-2">Admin Dashboard</h1>
-      <p className="text-zinc-500 mb-8 text-sm">
-        Overview of tests, users, and traffic
-      </p>
-
+    <div className="mx-auto max-w-5xl px-4 py-8 sm:py-10">
       {setupWarning && (
         <div className="mb-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 flex gap-3">
           <AlertTriangle className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
@@ -425,7 +420,7 @@ export default function AdminPage() {
 
       <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
         <Target className="h-5 w-5 text-blue-400" />
-        User visits & activity
+        Traffic
       </h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-10">
         {trafficCards.map((card) => {
@@ -442,27 +437,18 @@ export default function AdminPage() {
               <div className={`text-3xl font-bold font-mono ${card.color}`}>
                 {card.value}
               </div>
-              <p className="text-xs text-zinc-500 mt-2">{card.hint}</p>
             </div>
           );
         })}
       </div>
 
-      <h2 className="text-xl font-semibold mb-2 flex items-center gap-2">
+      <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
         <History className="h-5 w-5 text-violet-400" />
         Recent Actions
       </h2>
-      <p className="text-xs text-zinc-500 mb-4">
-        Activity history for guests and registered users (name, email, avatar,
-        time, location if allowed). Location only appears when the visitor allows
-        browser location access.
-      </p>
 
       {actions.length === 0 ? (
-        <p className="text-zinc-500">
-          No actions yet. Browse the site (not admin) or complete a test, then
-          refresh.
-        </p>
+        <p className="text-zinc-500">No actions yet.</p>
       ) : (
         <div className="rounded-2xl border border-white/10 overflow-x-auto">
           <table className="w-full text-sm min-w-[720px]">

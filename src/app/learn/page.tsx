@@ -131,34 +131,20 @@ const levelOrder: Level[] = ["Beginner", "Intermediate", "All", "Advanced"];
 
 export default function LearnPage() {
   return (
-    <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:py-16">
-      {/* Header */}
-      <div className="mb-10 max-w-2xl sm:mb-14">
-        <p className="mb-3 text-xs font-medium uppercase tracking-[0.14em] text-zinc-500">
-          Curriculum
-        </p>
-        <h1 className="text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-4xl">
-          Learn typing
-        </h1>
-        <p className="mt-3 text-[15px] leading-relaxed text-zinc-500 dark:text-zinc-400">
-          A structured path from home row basics to full keyboard fluency and
-          code typing. Choose a lesson to begin.
-        </p>
-
-        {/* Level legend — clean chips */}
-        <div className="mt-6 flex flex-wrap items-center gap-2">
-          {levelOrder.map((level) => (
-            <span
-              key={level}
-              className={cn(
-                "inline-flex items-center rounded-md px-2.5 py-1 text-xs font-medium",
-                levelStyles[level].badge
-              )}
-            >
-              {level}
-            </span>
-          ))}
-        </div>
+    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10">
+      {/* Level legend */}
+      <div className="mb-6 flex flex-wrap items-center gap-2">
+        {levelOrder.map((level) => (
+          <span
+            key={level}
+            className={cn(
+              "inline-flex items-center rounded-md px-2.5 py-1 text-xs font-medium",
+              levelStyles[level].badge
+            )}
+          >
+            {level}
+          </span>
+        ))}
       </div>
 
       {/* Lesson grid */}

@@ -17,10 +17,19 @@ import type { Difficulty, TimerOption, TypingStats, TestResult } from "@/types";
 
 interface TypingTestProps {
   mode?: Difficulty;
-  initialTimer?: TimerOption;
+  initialTimer?: TimerOption | number;
   wordCount?: number;
   customText?: string;
+  /** words = finish when text done; time = countdown timer */
+  testMode?: "words" | "time";
+  /** Override settings store when provided */
+  punctuation?: boolean;
+  numbers?: boolean;
+  /** Show built-in 15/30/60/120 timer chips (expert page) */
+  showTimerControls?: boolean;
   onComplete?: (result: TestResult) => void;
+  /** Notify parent so it can hide option bars on results-only view */
+  onStatusChange?: (status: "idle" | "running" | "finished") => void;
 }
 
 interface LiveCounters {
@@ -42,7 +51,7 @@ function buildStats(
   counters: LiveCounters,
   words: string[],
   timeLeft: number,
-  timerOption: TimerOption
+  timerOption: TimerOption | number
 ): TypingStats {
   const elapsed =
     counters.startTime != null
@@ -115,11 +124,28 @@ export function TypingTest({
   initialTimer = 60,
   wordCount = 50,
   customText,
+  testMode = "time",
+  punctuation: punctuationProp,
+  numbers: numbersProp,
+  showTimerControls,
   onComplete,
+  onStatusChange,
 }: TypingTestProps) {
-  const { fontSize, fontFamily, punctuation, numbers, cursorStyle } =
-    useSettingsStore();
+  const {
+    fontSize,
+    fontFamily,
+    punctuation: storePunctuation,
+    numbers: storeNumbers,
+  } = useSettingsStore();
+  const punctuation = punctuationProp ?? storePunctuation;
+  const numbers = numbersProp ?? storeNumbers;
   const { addTestResult } = useUserStore();
+
+  const durationSec =
+    typeof initialTimer === "number" && initialTimer > 0 ? initialTimer : 60;
+  const useTimer = testMode === "time";
+  const showTimerBar =
+    showTimerControls ?? (testMode === "time" && mode === "expert");
 
   const [words, setWords] = useState<string[]>([]);
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
@@ -129,10 +155,10 @@ export function TypingTest({
   const [status, setStatus] = useState<"idle" | "running" | "finished">(
     "idle"
   );
-  const [timeLeft, setTimeLeft] = useState<number>(
+  const [timeLeft, setTimeLeft] = useState<number>(durationSec);
+  const [timerOption, setTimerOption] = useState<TimerOption | number>(
     typeof initialTimer === "number" ? initialTimer : 60
   );
-  const [timerOption, setTimerOption] = useState<TimerOption>(initialTimer);
   const [startTime, setStartTime] = useState<number | null>(null);
   const [missKeys, setMissKeys] = useState(0);
   const [wrongWords, setWrongWords] = useState(0);
@@ -144,6 +170,7 @@ export function TypingTest({
 
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const wordsSurfaceRef = useRef<HTMLDivElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
   const statusRef = useRef(status);
   const finishedRef = useRef(false);
@@ -167,7 +194,8 @@ export function TypingTest({
 
   useEffect(() => {
     statusRef.current = status;
-  }, [status]);
+    onStatusChange?.(status);
+  }, [status, onStatusChange]);
 
   useEffect(() => {
     wordsRef.current = words;
@@ -188,25 +216,45 @@ export function TypingTest({
   const generateWords = useCallback(() => {
     if (customText) {
       setWords(customText.split(" ").filter(Boolean));
-    } else {
-      setWords(
-        getRandomWords(
-          wordCount,
-          mode === "beginner"
-            ? "beginner"
-            : mode === "intermediate"
-              ? "intermediate"
-              : "expert",
-          punctuation,
-          numbers
-        )
-      );
+      return;
     }
-  }, [customText, wordCount, mode, punctuation, numbers]);
+    // Timed tests need a long word pool so text does not run out early
+    const count =
+      testMode === "time"
+        ? Math.max(wordCount, Math.ceil(durationSec * 5), 80)
+        : wordCount;
+    setWords(
+      getRandomWords(
+        count,
+        mode === "beginner"
+          ? "beginner"
+          : mode === "intermediate"
+            ? "intermediate"
+            : "expert",
+        punctuation,
+        numbers
+      )
+    );
+  }, [
+    customText,
+    wordCount,
+    mode,
+    punctuation,
+    numbers,
+    testMode,
+    durationSec,
+  ]);
 
   useEffect(() => {
     generateWords();
   }, [generateWords]);
+
+  // Sync duration when parent changes timer (practice options)
+  useEffect(() => {
+    if (!useTimer) return;
+    setTimeLeft(durationSec);
+    setTimerOption(durationSec);
+  }, [durationSec, useTimer]);
 
   const finishTest = useCallback(() => {
     if (finishedRef.current) return;
@@ -242,34 +290,35 @@ export function TypingTest({
       timestamp: Date.now(),
     };
 
-    addTestResult(result);
-    onComplete?.(result);
-
-    // Admin Recent Actions history (guest or registered)
-    void import("@/lib/activity").then(({ logUserAction }) =>
-      logUserAction({
-        actionType: "test_complete",
-        details: `${result.wpm} WPM · ${result.accuracy}% · ${mode}`,
-        path:
-          typeof window !== "undefined" ? window.location.pathname : "/practice",
-      })
-    );
+    // Defer store updates so we never update Navbar during TypingTest render/setState
+    queueMicrotask(() => {
+      addTestResult(result);
+      onComplete?.(result);
+      void import("@/lib/activity").then(({ logUserAction }) =>
+        logUserAction({
+          actionType: "test_complete",
+          details: `${result.wpm} WPM · ${result.accuracy}% · ${mode}`,
+          path:
+            typeof window !== "undefined"
+              ? window.location.pathname
+              : "/practice",
+        })
+      );
+    });
   }, [mode, addTestResult, onComplete]);
 
-  // Timer countdown
+  // Timer countdown (time mode only) — never call finishTest inside setState
   useEffect(() => {
-    if (status !== "running" || timeLeft <= 0) return;
+    if (!useTimer || status !== "running") return;
+    if (timeLeft <= 0) {
+      finishTest();
+      return;
+    }
     const interval = setInterval(() => {
-      setTimeLeft((t) => {
-        if (t <= 1) {
-          finishTest();
-          return 0;
-        }
-        return t - 1;
-      });
+      setTimeLeft((t) => Math.max(0, t - 1));
     }, 1000);
     return () => clearInterval(interval);
-  }, [status, timeLeft, finishTest]);
+  }, [useTimer, status, timeLeft, finishTest]);
 
   // Live WPM sampling
   useEffect(() => {
@@ -304,7 +353,13 @@ export function TypingTest({
     setTotalChars(0);
     setWpmHistory([]);
     setFinalStats(null);
-    setTimeLeft(typeof timerOption === "number" ? timerOption : 60);
+    setTimeLeft(
+      useTimer
+        ? typeof timerOption === "number"
+          ? timerOption
+          : durationSec
+        : durationSec
+    );
     countersRef.current = {
       correctChars: 0,
       totalChars: 0,
@@ -318,9 +373,9 @@ export function TypingTest({
       wpmHistory: [],
     };
     generateWords();
-    // Focus after restart (also covered by status effect; call immediately too)
+    // Focus after restart without scrolling the page
     requestAnimationFrame(() => {
-      inputRef.current?.focus({ preventScroll: true });
+      focusInput();
     });
   };
 
@@ -380,13 +435,21 @@ export function TypingTest({
     }
   };
 
-  const focusInput = useCallback((opts?: { preventScroll?: boolean }) => {
+  /** Focus typing input without moving the page scroll (critical for long text). */
+  const focusInput = useCallback((_opts?: { preventScroll?: boolean }) => {
     const el = inputRef.current;
     if (!el || el.disabled) return;
+    const sx = typeof window !== "undefined" ? window.scrollX : 0;
+    const sy = typeof window !== "undefined" ? window.scrollY : 0;
     try {
-      el.focus({ preventScroll: opts?.preventScroll ?? true });
+      el.focus({ preventScroll: true });
     } catch {
       el.focus();
+    }
+    // Some browsers still scroll focused controls into view — restore immediately
+    if (typeof window !== "undefined") {
+      window.scrollTo(sx, sy);
+      requestAnimationFrame(() => window.scrollTo(sx, sy));
     }
   }, []);
 
@@ -510,18 +573,14 @@ export function TypingTest({
     applyTypedValue(e.target.value);
   };
 
-  // Keep caret in the hidden input after mount, status change, restart, word count change
+  // Focus once when options remount / idle — do NOT re-focus on every status tick
+  // (re-focusing a tall input mid-test scrolls the page and interrupts typing)
   useEffect(() => {
     if (status === "finished") return;
+    if (status === "running") return;
     focusInput();
     const t0 = window.setTimeout(() => focusInput(), 0);
-    const t1 = window.setTimeout(() => focusInput(), 50);
-    const t2 = window.setTimeout(() => focusInput(), 120);
-    return () => {
-      window.clearTimeout(t0);
-      window.clearTimeout(t1);
-      window.clearTimeout(t2);
-    };
+    return () => window.clearTimeout(t0);
   }, [status, wordCount, mode, customText, focusInput]);
 
   // Any keyboard key starts / continues the test without clicking the text box
@@ -615,25 +674,18 @@ export function TypingTest({
     return () => window.removeEventListener("keydown", onWindowKeyDown, true);
   }, [focusInput, syncCounters]);
 
-  // When the test ends, scroll results into view
+  // Do not auto-scroll on finish either if user is mid-page; optional soft nearest only
   useEffect(() => {
-    if (status !== "finished" || !finalStats) return;
-
-    const scrollToResults = () => {
-      resultsRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    };
-
-    // Wait a frame so the results panel is mounted
-    const id = window.requestAnimationFrame(() => {
-      scrollToResults();
-      // Extra pass for mobile layout settling
-      window.setTimeout(scrollToResults, 80);
-    });
-
-    return () => window.cancelAnimationFrame(id);
+    if (status !== "finished" || !finalStats || !resultsRef.current) return;
+    // Only scroll if results are completely below the viewport (not mid-typing jump)
+    const el = resultsRef.current;
+    const rect = el.getBoundingClientRect();
+    const fullyBelow = rect.top > window.innerHeight - 40;
+    if (!fullyBelow) return;
+    const id = window.setTimeout(() => {
+      el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }, 80);
+    return () => window.clearTimeout(id);
   }, [status, finalStats]);
 
   const liveElapsed =
@@ -667,8 +719,9 @@ export function TypingTest({
         <span
           key={wIdx}
           className={cn(
-            "mr-2 inline-block",
-            isPast && typed === word && "text-emerald-500",
+            "mr-2.5 mb-2 inline-block",
+            // Correct typed text matches caret blue
+            isPast && typed === word && "text-blue-500 dark:text-blue-400",
             isPast &&
               typed !== word &&
               "text-red-500 underline decoration-red-500/50"
@@ -678,36 +731,36 @@ export function TypingTest({
             let className = "text-zinc-500 dark:text-zinc-500";
             if (isPast) {
               className =
-                typed?.[cIdx] === char ? "text-emerald-500" : "text-red-500";
+                typed?.[cIdx] === char
+                  ? "text-blue-500 dark:text-blue-400"
+                  : "text-red-500";
             } else if (isCurrent) {
               if (cIdx < currentCharIndex) {
                 className =
                   input[cIdx] === char
-                    ? "text-emerald-400"
+                    ? "text-blue-500 dark:text-blue-400"
                     : "text-red-400 bg-red-500/20";
               } else if (cIdx === currentCharIndex) {
-                className = cn(
-                  "text-zinc-900 dark:text-zinc-100",
-                  cursorStyle === "block" && "bg-blue-500/80 text-white",
-                  cursorStyle === "underline" && "border-b-2 border-blue-500",
-                  cursorStyle === "line" && "border-l-2 border-blue-500"
-                );
+                className = "text-zinc-500 dark:text-zinc-400";
               }
             }
             return (
-              <span key={cIdx} className={className}>
-                {char}
+              <span key={cIdx} className="relative">
+                {/* Fast narrow line caret before the active character */}
+                {isCurrent &&
+                  status !== "finished" &&
+                  cIdx === currentCharIndex && (
+                    <span className="typing-caret absolute left-0 top-[0.12em]" />
+                  )}
+                <span className={className}>{char}</span>
               </span>
             );
           })}
-          {isCurrent && currentCharIndex >= word.length && (
-            <span
-              className={cn(
-                "inline-block w-0.5 h-[1.1em] bg-blue-500 ml-0.5 animate-pulse",
-                cursorStyle === "block" && "w-2 bg-blue-500/80"
-              )}
-            />
-          )}
+          {isCurrent &&
+            status !== "finished" &&
+            currentCharIndex >= word.length && (
+              <span className="typing-caret ml-0.5 align-middle" />
+            )}
         </span>
       );
     });
@@ -715,142 +768,19 @@ export function TypingTest({
 
   const displayStats = finalStats;
 
-  return (
-    <div className="w-full max-w-4xl mx-auto">
-      {mode === "expert" && status !== "finished" && (
-        <div className="flex flex-wrap items-center justify-center gap-2 mb-8">
-          {([15, 30, 60, 120] as const).map((t) => (
-            <Button
-              key={t}
-              variant={timerOption === t ? "default" : "ghost"}
-              size="sm"
-              onClick={() => {
-                setTimerOption(t);
-                setTimeLeft(t);
-                if (status === "idle") resetTest();
-              }}
-              disabled={status === "running"}
-            >
-              {t}s
-            </Button>
-          ))}
-        </div>
-      )}
+  const timeLabel = useTimer ? "Time" : "Elapsed";
+  const timeValue = useTimer
+    ? formatTime(timeLeft)
+    : formatTime(Math.floor(liveElapsed));
 
-      <div className="flex flex-wrap items-center justify-center gap-6 mb-6 text-sm font-mono">
-        <div className="flex flex-col items-center">
-          <span className="text-zinc-500 text-xs uppercase tracking-wider">
-            WPM
-          </span>
-          <span className="text-2xl font-bold text-blue-500">{currentWpm}</span>
-        </div>
-        <div className="flex flex-col items-center">
-          <span className="text-zinc-500 text-xs uppercase tracking-wider">
-            Accuracy
-          </span>
-          <span className="text-2xl font-bold text-emerald-500">
-            {currentAccuracy}%
-          </span>
-        </div>
-        <div className="flex flex-col items-center">
-          <span className="text-zinc-500 text-xs uppercase tracking-wider">
-            Time
-          </span>
-          <span className="text-2xl font-bold text-amber-500">
-            {status === "finished" ? "0:00" : formatTime(timeLeft)}
-          </span>
-        </div>
-        {(status === "running" || status === "finished") && (
-          <>
-            <div className="flex flex-col items-center">
-              <span className="text-zinc-500 text-xs uppercase tracking-wider">
-                Wrong Words
-              </span>
-              <span className="text-2xl font-bold text-red-500">
-                {status === "finished" && displayStats
-                  ? displayStats.wrongWords
-                  : wrongWords}
-              </span>
-            </div>
-            <div className="flex flex-col items-center">
-              <span className="text-zinc-500 text-xs uppercase tracking-wider">
-                Miss Keys
-              </span>
-              <span className="text-2xl font-bold text-orange-500">
-                {status === "finished" && displayStats
-                  ? displayStats.mistakes
-                  : missKeys}
-              </span>
-            </div>
-          </>
-        )}
-      </div>
-
-      <div
-        ref={containerRef}
-        onClick={() => focusInput({ preventScroll: false })}
-        onMouseDown={(e) => {
-          // Keep focus on the typing input even when clicking labels around it
-          if (e.target !== inputRef.current) {
-            e.preventDefault();
-            focusInput({ preventScroll: true });
-          }
-        }}
-        className={cn(
-          "relative rounded-2xl border border-white/10 bg-white/5 dark:bg-zinc-900/50 backdrop-blur-xl p-8 min-h-[180px] cursor-text transition-all",
-          status === "idle" && "hover:border-blue-500/30"
-        )}
-      >
-        <div
-          className="leading-relaxed tracking-wide select-none"
-          style={{
-            fontSize: `${fontSize}px`,
-            fontFamily: `"${fontFamily}", ui-monospace, monospace`,
-          }}
-        >
-          {renderWords()}
-        </div>
-
-        <input
-          ref={inputRef}
-          type="text"
-          value={input}
-          onChange={handleInput}
-          onKeyDown={handleKeyDown}
-          className="absolute inset-0 w-full h-full caret-transparent"
-          style={{ opacity: 0 }}
-          autoComplete="off"
-          autoCorrect="off"
-          autoCapitalize="off"
-          spellCheck={false}
-          autoFocus
-          disabled={status === "finished"}
-          inputMode="text"
-          enterKeyHint="done"
-          aria-label="Typing test input"
-        />
-
-        {status === "idle" && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <p className="text-zinc-500 text-sm bg-zinc-900/80 px-4 py-2 rounded-full backdrop-blur">
-              Start typing to begin
-            </p>
-          </div>
-        )}
-      </div>
-
-      <div className="flex justify-center gap-3 mt-6">
-        <Button variant="outline" size="sm" onClick={resetTest}>
-          <RotateCcw className="h-4 w-4" />
-          Restart
-        </Button>
-      </div>
-
-      {status === "finished" && displayStats && (
+  // ── Results-only view (no paragraph, live stats, or mid-test chrome) ──
+  if (status === "finished" && displayStats) {
+    return (
+      <div className="w-full max-w-4xl mx-auto">
         <div
           ref={resultsRef}
           id="typing-test-results"
-          className="mt-10 scroll-mt-24 rounded-2xl border border-white/10 bg-white/5 dark:bg-zinc-900/60 backdrop-blur-xl p-8"
+          className="rounded-2xl border border-white/10 bg-white/5 dark:bg-zinc-900/60 backdrop-blur-xl p-8 sm:p-10"
         >
           <div className="text-center mb-8">
             <Trophy className="h-12 w-12 text-amber-400 mx-auto mb-3" />
@@ -907,9 +837,7 @@ export function TypingTest({
                 key={stat.label}
                 className="rounded-xl bg-white/5 border border-white/5 p-4 text-center"
               >
-                <div
-                  className={cn("text-2xl font-bold font-mono", stat.color)}
-                >
+                <div className={cn("text-2xl font-bold font-mono", stat.color)}>
                   {stat.value}
                 </div>
                 <div className="text-xs text-zinc-500 mt-1 uppercase tracking-wider">
@@ -954,7 +882,146 @@ export function TypingTest({
             </Button>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  // ── Active typing UI ──
+  return (
+    <div className="w-full max-w-4xl mx-auto">
+      {showTimerBar && (
+        <div className="flex flex-wrap items-center justify-center gap-2 mb-8">
+          {([15, 30, 60, 120] as const).map((t) => (
+            <Button
+              key={t}
+              variant={timerOption === t ? "default" : "ghost"}
+              size="sm"
+              onClick={() => {
+                setTimerOption(t);
+                setTimeLeft(t);
+                if (status === "idle") resetTest();
+              }}
+              disabled={status === "running"}
+            >
+              {t}s
+            </Button>
+          ))}
+        </div>
       )}
+
+      <div className="flex flex-wrap items-center justify-center gap-6 mb-6 text-sm font-mono">
+        <div className="flex flex-col items-center">
+          <span className="text-zinc-500 text-xs uppercase tracking-wider">
+            WPM
+          </span>
+          <span className="text-2xl font-bold text-blue-500">{currentWpm}</span>
+        </div>
+        <div className="flex flex-col items-center">
+          <span className="text-zinc-500 text-xs uppercase tracking-wider">
+            Accuracy
+          </span>
+          <span className="text-2xl font-bold text-emerald-500">
+            {currentAccuracy}%
+          </span>
+        </div>
+        <div className="flex flex-col items-center">
+          <span className="text-zinc-500 text-xs uppercase tracking-wider">
+            {timeLabel}
+          </span>
+          <span className="text-2xl font-bold text-amber-500">{timeValue}</span>
+        </div>
+        {status === "running" && (
+          <>
+            <div className="flex flex-col items-center">
+              <span className="text-zinc-500 text-xs uppercase tracking-wider">
+                Wrong Words
+              </span>
+              <span className="text-2xl font-bold text-red-500">{wrongWords}</span>
+            </div>
+            <div className="flex flex-col items-center">
+              <span className="text-zinc-500 text-xs uppercase tracking-wider">
+                Miss Keys
+              </span>
+              <span className="text-2xl font-bold text-orange-500">{missKeys}</span>
+            </div>
+          </>
+        )}
+      </div>
+
+      <div
+        ref={containerRef}
+        onClick={() => focusInput({ preventScroll: true })}
+        onMouseDown={(e) => {
+          if (e.target !== inputRef.current) {
+            e.preventDefault();
+            focusInput({ preventScroll: true });
+          }
+        }}
+        className={cn(
+          "relative cursor-text py-2 sm:py-4",
+          status === "idle" && "opacity-95"
+        )}
+      >
+        <div
+          ref={wordsSurfaceRef}
+          className="relative w-full select-none leading-[1.85] tracking-wide"
+          style={{
+            fontSize: `${fontSize}px`,
+            fontFamily: `"${fontFamily}", ui-monospace, monospace`,
+          }}
+        >
+          {renderWords()}
+
+          <input
+            ref={inputRef}
+            type="text"
+            value={input}
+            onChange={handleInput}
+            onKeyDown={handleKeyDown}
+            className="absolute left-0 top-0 z-10 caret-transparent"
+            style={{
+              opacity: 0,
+              width: 1,
+              height: 1,
+              padding: 0,
+              margin: 0,
+              border: 0,
+              overflow: "hidden",
+            }}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            inputMode="text"
+            enterKeyHint="done"
+            aria-label="Typing test input"
+            tabIndex={0}
+          />
+        </div>
+
+        {status === "idle" && (
+          <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
+            <div className="flex flex-col items-center gap-3 px-4">
+              <div className="flex items-center gap-2 rounded-xl border border-zinc-200/80 bg-white/90 px-4 py-2.5 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-zinc-950/85">
+                <kbd className="inline-flex h-7 min-w-[1.75rem] items-center justify-center rounded-md border border-zinc-200 bg-zinc-50 px-1.5 font-mono text-[11px] font-medium text-zinc-600 shadow-[0_1px_0_0_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-300">
+                  A–Z
+                </kbd>
+                <span className="text-sm font-medium tracking-tight text-zinc-600 dark:text-zinc-300">
+                  Press any key to start
+                </span>
+              </div>
+              <span className="h-1 w-1 animate-pulse rounded-full bg-blue-500/70" />
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-4 flex justify-center gap-3 pb-2">
+        <Button variant="outline" size="sm" onClick={resetTest}>
+          <RotateCcw className="h-4 w-4" />
+          Restart
+        </Button>
+      </div>
     </div>
   );
 }

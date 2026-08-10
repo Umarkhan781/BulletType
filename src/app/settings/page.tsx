@@ -8,9 +8,7 @@ export default function SettingsPage() {
   const s = useSettingsStore();
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-12 sm:px-6">
-      <h1 className="text-3xl font-bold tracking-tight mb-8">Settings</h1>
-
+    <div className="mx-auto max-w-2xl px-4 py-8 sm:px-6 sm:py-10">
       <div className="space-y-8">
         {/* Theme */}
         <section className="glass rounded-2xl p-6">

@@ -17,20 +17,20 @@ import {
   X,
 } from "lucide-react";
 import { useState, useEffect } from "react";
-import { useSettingsStore } from "@/store/useSettingsStore";
+import { applyThemeClass, useSettingsStore } from "@/store/useSettingsStore";
 import { useUserStore } from "@/store/useUserStore";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { href: "/", label: "Home", icon: Home },
-  { href: "/learn", label: "Learn", icon: BookOpen },
-  { href: "/practice", label: "Practice", icon: Keyboard },
-  { href: "/expert", label: "Expert", icon: Zap },
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
-];
+  { href: "/", label: "Home", icon: Home, id: "home" },
+  { href: "/learn", label: "Learn", icon: BookOpen, id: "learn" },
+  { href: "/practice", label: "Practice", icon: Keyboard, id: "practice" },
+  { href: "/expert", label: "Expert", icon: Zap, id: "expert" },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, id: "dashboard" },
+  { href: "/leaderboard", label: "Leaderboard", icon: Trophy, id: "leaderboard" },
+] as const;
 
 export function Navbar() {
   const pathname = usePathname();
@@ -168,29 +168,23 @@ export function Navbar() {
   }, [isAdminRoute, pathname, user?.id]);
 
   const toggleTheme = () => {
-    const next = theme === "dark" ? "light" : theme === "light" ? "system" : "dark";
+    // Cycle: dark → light → dark (dark is product default)
+    const next = theme === "dark" ? "light" : "dark";
     setTheme(next);
-    // Apply to document
-    const root = document.documentElement;
-    if (next === "dark" || (next === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
-      root.classList.add("dark");
-    } else {
-      root.classList.remove("dark");
-    }
+    applyThemeClass(next);
   };
 
   useEffect(() => {
     if (!mounted) return;
-    const root = document.documentElement;
-    if (
-      theme === "dark" ||
-      (theme === "system" &&
-        window.matchMedia("(prefers-color-scheme: dark)").matches)
-    ) {
-      root.classList.add("dark");
-    } else {
-      root.classList.remove("dark");
+    // If old "system" is still in memory, normalize to dark
+    if (theme === "system") {
+      setTheme("dark");
+      applyThemeClass("dark");
+      return;
     }
+    applyThemeClass(theme);
+    // setTheme is stable from zustand; omit from deps to avoid useEffect size churn
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [theme, mounted]);
 
   return (
@@ -209,7 +203,7 @@ export function Navbar() {
               const active = pathname === item.href;
               return (
                 <Link
-                  key={item.href}
+                  key={item.id}
                   href={item.href}
                   className={cn(
                     "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
@@ -290,7 +284,7 @@ export function Navbar() {
               const active = pathname === item.href;
               return (
                 <Link
-                  key={item.href}
+                  key={item.id}
                   href={item.href}
                   onClick={() => setMobileOpen(false)}
                   className={cn(
