@@ -3,7 +3,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { supabase } from "@/lib/supabase";
-import { recordSiteVisit } from "@/lib/visits";
 import type { UserProfile, TestResult } from "@/types";
 
 const AVATAR_BUCKET = "avatars";
@@ -413,9 +412,7 @@ export const useUserStore = create<UserState>()(
             };
 
             set({ user: userProfile, isAuthenticated: true });
-
-            // Track visit / last seen for admin analytics (non-blocking)
-            void recordSiteVisit(session.user.id);
+            // Site visits + live presence are handled in Navbar (skipped on /admin)
           } else {
             set({ user: null, isAuthenticated: false });
           }

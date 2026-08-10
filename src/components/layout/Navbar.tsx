@@ -41,17 +41,10 @@ export function Navbar() {
 
   useEffect(() => setMounted(true), []);
 
+  const isAdminRoute = pathname?.startsWith("/admin") ?? false;
+
   useEffect(() => {
     initializeAuth();
-
-    // Record a site visit for everyone (guest + logged-in), including mobile
-    void (async () => {
-      const { recordSiteVisit } = await import("@/lib/visits");
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      await recordSiteVisit(session?.user?.id ?? null);
-    })();
 
     const {
       data: { subscription },
@@ -67,19 +60,60 @@ export function Navbar() {
           void initializeAuth();
         }, 0);
       }
-      if (event === "SIGNED_IN") {
-        setTimeout(async () => {
-          const { recordSiteVisit } = await import("@/lib/visits");
-          const {
-            data: { session },
-          } = await supabase.auth.getSession();
-          await recordSiteVisit(session?.user?.id ?? null);
-        }, 0);
-      }
     });
 
     return () => subscription.unsubscribe();
   }, [initializeAuth]);
+
+  // Visits + live presence: only on non-admin pages (admin must not count as active)
+  useEffect(() => {
+    if (isAdminRoute) return;
+
+    let stopPresence: (() => void) | undefined;
+
+    void (async () => {
+      const { recordSiteVisit } = await import("@/lib/visits");
+      const { startPresenceTracking } = await import("@/lib/presence");
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const uid = session?.user?.id ?? user?.id ?? null;
+
+      await recordSiteVisit(uid);
+      stopPresence = startPresenceTracking(uid);
+    })();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_IN") {
+        setTimeout(async () => {
+          const { recordSiteVisit } = await import("@/lib/visits");
+          const { startPresenceTracking } = await import("@/lib/presence");
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
+          await recordSiteVisit(session?.user?.id ?? null);
+          stopPresence?.();
+          stopPresence = startPresenceTracking(session?.user?.id ?? null);
+        }, 0);
+      }
+      if (event === "SIGNED_OUT") {
+        setTimeout(() => {
+          void (async () => {
+            const { startPresenceTracking } = await import("@/lib/presence");
+            stopPresence?.();
+            stopPresence = startPresenceTracking(null);
+          })();
+        }, 0);
+      }
+    });
+
+    return () => {
+      stopPresence?.();
+      subscription.unsubscribe();
+    };
+  }, [isAdminRoute, user?.id]);
 
   const toggleTheme = () => {
     const next = theme === "dark" ? "light" : theme === "light" ? "system" : "dark";

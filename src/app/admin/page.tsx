@@ -4,6 +4,10 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { daysAgoISO, monthsAgoISO } from "@/lib/visits";
 import {
+  countRealtimeActiveUsers,
+  ONLINE_WINDOW_MS,
+} from "@/lib/presence";
+import {
   Activity,
   CalendarDays,
   CalendarRange,
@@ -111,56 +115,11 @@ async function fetchVisitRowsSince(sinceISO: string): Promise<{
   return { rows, totalCount };
 }
 
-/**
- * Unique people active in the last 7 days.
- * Merges: profiles.last_seen_at + user_visits + results (does not stop at 0).
- */
-async function countActiveUsers(): Promise<number> {
-  const since = daysAgoISO(7);
-  const keys = new Set<string>();
-
-  // 1) Logged-in users with a recent last_seen_at heartbeat
-  const bySeen = await supabase
-    .from("profiles")
-    .select("id")
-    .gte("last_seen_at", since)
-    .limit(5000);
-
-  if (!bySeen.error && bySeen.data) {
-    for (const row of bySeen.data) {
-      if (row.id) keys.add(`u:${String(row.id)}`);
-    }
-  }
-
-  // 2) Anyone who opened the site (guest visitor_id or logged-in user_id)
-  const byVisits = await fetchVisitRowsSince(since);
-  if (!byVisits.error) {
-    for (const row of byVisits.rows) {
-      const key = personKey(row);
-      if (key) keys.add(key);
-    }
-  }
-
-  // 3) Users who completed a test recently
-  const byResults = await supabase
-    .from("results")
-    .select("user_id")
-    .gte("created_at", since)
-    .limit(5000);
-
-  if (!byResults.error && byResults.data) {
-    for (const row of byResults.data) {
-      if (row.user_id) keys.add(`u:${String(row.user_id)}`);
-    }
-  }
-
-  return keys.size;
-}
-
 export default function AdminPage() {
   const [results, setResults] = useState<Result[]>([]);
   const [loading, setLoading] = useState(true);
   const [setupWarning, setSetupWarning] = useState<string | null>(null);
+  const [presenceWarning, setPresenceWarning] = useState<string | null>(null);
   const [stats, setStats] = useState<AdminStats>({
     totalTests: 0,
     averageWpm: 0,
@@ -173,6 +132,7 @@ export default function AdminPage() {
     activeUsers: 0,
   });
 
+  // Load dashboard once; poll realtime active users separately
   useEffect(() => {
     async function loadData() {
       setLoading(true);
@@ -188,10 +148,10 @@ export default function AdminPage() {
         .from("profiles")
         .select("*", { count: "exact", head: true });
 
-      const [v30, v12, activeUsers] = await Promise.all([
+      const [v30, v12, online] = await Promise.all([
         fetchVisitRowsSince(daysAgoISO(30)),
         fetchVisitRowsSince(monthsAgoISO(12)),
-        countActiveUsers(),
+        countRealtimeActiveUsers(),
       ]);
 
       if (v30.error || v12.error) {
@@ -200,6 +160,14 @@ export default function AdminPage() {
             v12.error ||
             "Visit table missing. Run supabase/admin-analytics.sql in Supabase SQL Editor."
         );
+      }
+
+      if (online.source !== "site_presence" && online.error) {
+        setPresenceWarning(
+          "Realtime presence table missing or limited. Run supabase/fix-site-presence.sql for accurate live Active Users (admin page does not count itself)."
+        );
+      } else {
+        setPresenceWarning(null);
       }
 
       const rows = resultsData || [];
@@ -221,13 +189,37 @@ export default function AdminPage() {
         visitsLast12Months: v12.totalCount,
         uniqueVisitorsLast30Days: countUniquePersons(v30.rows),
         uniqueVisitorsLast12Months: countUniquePersons(v12.rows),
-        activeUsers,
+        activeUsers: online.count,
       });
 
       setLoading(false);
     }
 
     loadData();
+  }, []);
+
+  // Refresh only the live Active Users number every 15s (not visit history)
+  useEffect(() => {
+    let cancelled = false;
+
+    const refreshOnline = async () => {
+      const online = await countRealtimeActiveUsers();
+      if (cancelled) return;
+      setStats((s) => ({ ...s, activeUsers: online.count }));
+      if (online.source !== "site_presence" && online.error) {
+        setPresenceWarning(
+          "Realtime presence table missing or limited. Run supabase/fix-site-presence.sql for accurate live Active Users (admin page does not count itself)."
+        );
+      } else {
+        setPresenceWarning(null);
+      }
+    };
+
+    const id = window.setInterval(refreshOnline, 15_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
   }, []);
 
   if (loading) {
@@ -295,12 +287,13 @@ export default function AdminPage() {
       hint: "Different people only — same person counted once",
     },
     {
-      label: "Active Users",
+      label: "Active Users (Live)",
       value: stats.activeUsers,
       icon: UserCheck,
       color: "text-emerald-400",
-      hint:
-        "Unique people active in the last 7 days (visits + logged-in last seen + tests)",
+      hint: `People on the site right now (last ${Math.round(
+        ONLINE_WINDOW_MS / 1000
+      )}s). Admin page does not count. Not unique visits.`,
     },
   ];
 
@@ -325,6 +318,22 @@ export default function AdminPage() {
               Open Supabase → SQL Editor → run{" "}
               <code className="text-amber-100">supabase/admin-analytics.sql</code>
               , then visit the site again (phone or PC) and refresh this page.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {presenceWarning && (
+        <div className="mb-6 rounded-2xl border border-sky-500/30 bg-sky-500/10 p-4 flex gap-3">
+          <AlertTriangle className="h-5 w-5 text-sky-400 shrink-0 mt-0.5" />
+          <div className="text-sm text-sky-100/90">
+            <p className="font-medium text-sky-300 mb-1">
+              Live Active Users needs a small setup
+            </p>
+            <p className="text-sky-200/80">{presenceWarning}</p>
+            <p className="mt-2 text-sky-200/70">
+              Supabase → SQL Editor → run{" "}
+              <code className="text-sky-100">supabase/fix-site-presence.sql</code>
             </p>
           </div>
         </div>
