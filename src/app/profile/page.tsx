@@ -2,14 +2,35 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useUserStore } from "@/store/useUserStore";
-import { Award, MapPin, Calendar, Target, LogOut, Pencil, X } from "lucide-react";
+import {
+  Award,
+  MapPin,
+  Calendar,
+  Target,
+  LogOut,
+  Pencil,
+  X,
+  Camera,
+  Trash2,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 
+function hasCustomAvatar(url?: string) {
+  return !!url && !url.includes("api.dicebear.com");
+}
+
 export default function ProfilePage() {
-  const { user, recentTests, logout, updateProfile, updateAvatar, initializeAuth } =
-    useUserStore();
+  const {
+    user,
+    recentTests,
+    logout,
+    updateProfile,
+    updateAvatar,
+    removeAvatar,
+    initializeAuth,
+  } = useUserStore();
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const openedFromQuery = useRef(false);
@@ -19,6 +40,7 @@ export default function ProfilePage() {
   const [username, setUsername] = useState("");
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [removingAvatar, setRemovingAvatar] = useState(false);
   const [message, setMessage] = useState("");
   const [messageOk, setMessageOk] = useState(false);
 
@@ -107,6 +129,26 @@ export default function ProfilePage() {
     setUploadingAvatar(false);
   };
 
+  const handleRemoveAvatar = async () => {
+    if (removingAvatar || uploadingAvatar) return;
+    setRemovingAvatar(true);
+    setMessage("");
+    setMessageOk(false);
+
+    const { error } = await removeAvatar();
+    if (error) {
+      setMessage(error);
+      setMessageOk(false);
+    } else {
+      setMessageOk(true);
+      setMessage("Profile photo removed.");
+    }
+    setRemovingAvatar(false);
+  };
+
+  const avatarBusy = uploadingAvatar || removingAvatar;
+  const showCustomAvatar = hasCustomAvatar(user?.avatar);
+
   if (!authChecked) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-20 text-center">
@@ -130,41 +172,73 @@ export default function ProfilePage() {
     <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6">
       <div className="glass rounded-3xl p-8 sm:p-10">
         <div className="flex flex-col sm:flex-row items-center gap-6">
-          <div className="relative shrink-0">
-            <img
-              src={user.avatar}
-              alt={user.username}
-              className="h-24 w-24 rounded-full border-4 border-blue-500/30 object-cover bg-white/5"
-            />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploadingAvatar}
-              aria-label="Change profile photo"
-              title="Change profile photo"
-              className="absolute -bottom-0.5 -right-0.5 flex h-7 w-7 items-center justify-center rounded-full border border-white/20 bg-zinc-900 text-white shadow-md transition hover:bg-blue-600 disabled:opacity-50"
-            >
-              <Pencil className="h-3 w-3" />
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif"
-              className="hidden"
-              onChange={handleAvatarChange}
-            />
-            {uploadingAvatar && (
-              <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50">
-                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-              </div>
-            )}
+          <div className="flex flex-col items-center gap-2 shrink-0">
+            <div className="relative">
+              <img
+                src={user.avatar}
+                alt={user.username}
+                className="h-24 w-24 rounded-full border-4 border-blue-500/30 object-cover bg-white/5"
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={avatarBusy}
+                aria-label="Change profile photo"
+                title="Change profile photo"
+                className="absolute -bottom-0.5 -right-0.5 flex h-7 w-7 items-center justify-center rounded-full border border-white/20 bg-zinc-900 text-white shadow-md transition hover:bg-blue-600 disabled:opacity-50"
+              >
+                <Camera className="h-3.5 w-3.5" />
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/jpg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif"
+                className="hidden"
+                onChange={handleAvatarChange}
+              />
+              {avatarBusy && (
+                <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50">
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                </div>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={avatarBusy}
+                className="text-xs font-medium text-blue-400 hover:text-blue-300 disabled:opacity-50"
+              >
+                {uploadingAvatar ? "Uploading..." : "Change photo"}
+              </button>
+              {showCustomAvatar && (
+                <button
+                  type="button"
+                  onClick={handleRemoveAvatar}
+                  disabled={avatarBusy}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-red-400 hover:text-red-300 disabled:opacity-50"
+                >
+                  <Trash2 className="h-3 w-3" />
+                  {removingAvatar ? "Removing..." : "Remove"}
+                </button>
+              )}
+            </div>
           </div>
           <div className="text-center sm:text-left flex-1 w-full min-w-0">
             <h1 className="text-2xl font-bold">{user.name}</h1>
             <p className="text-zinc-500">@{user.username}</p>
             {user.bio && <p className="mt-2 text-sm">{user.bio}</p>}
-            {message && messageOk && !editing && (
-              <p className="mt-2 text-sm text-emerald-400">{message}</p>
+            {/* Always show photo / profile feedback (not only inside edit form) */}
+            {message && (
+              <p
+                className={`mt-2 text-sm ${
+                  messageOk
+                    ? "text-emerald-400"
+                    : "text-red-500 dark:text-red-400"
+                }`}
+              >
+                {message}
+              </p>
             )}
             <div className="mt-3 flex flex-wrap items-center justify-center sm:justify-start gap-3 text-sm text-zinc-500">
               {user.country && (
@@ -255,9 +329,6 @@ export default function ProfilePage() {
                 className="w-full px-4 py-2.5 rounded-xl border border-zinc-300 dark:border-white/15 bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50 placeholder:text-zinc-400 caret-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
               />
             </div>
-            {message && !messageOk && (
-              <p className="text-sm text-red-500 dark:text-red-400">{message}</p>
-            )}
             <div className="flex flex-wrap gap-2">
               <Button type="submit" size="sm" disabled={saving}>
                 {saving ? "Saving..." : "Save"}

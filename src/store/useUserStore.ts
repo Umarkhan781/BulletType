@@ -6,6 +6,65 @@ import { supabase } from "@/lib/supabase";
 import { recordSiteVisit } from "@/lib/visits";
 import type { UserProfile, TestResult } from "@/types";
 
+const AVATAR_BUCKET = "avatars";
+const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
+
+function defaultAvatarUrl(userId: string) {
+  return `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(userId)}`;
+}
+
+function isCustomAvatar(url?: string | null) {
+  if (!url) return false;
+  return !url.includes("api.dicebear.com");
+}
+
+function guessImageType(file: File): { mime: string; ext: string } | null {
+  const byMime: Record<string, string> = {
+    "image/jpeg": "jpg",
+    "image/jpg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/gif": "gif",
+  };
+  if (file.type && byMime[file.type]) {
+    return { mime: file.type === "image/jpg" ? "image/jpeg" : file.type, ext: byMime[file.type] };
+  }
+
+  const name = file.name.toLowerCase();
+  if (name.endsWith(".png")) return { mime: "image/png", ext: "png" };
+  if (name.endsWith(".webp")) return { mime: "image/webp", ext: "webp" };
+  if (name.endsWith(".gif")) return { mime: "image/gif", ext: "gif" };
+  if (name.endsWith(".jpg") || name.endsWith(".jpeg")) return { mime: "image/jpeg", ext: "jpg" };
+  return null;
+}
+
+async function clearUserAvatarFiles(userId: string) {
+  const { data: listed, error: listError } = await supabase.storage
+    .from(AVATAR_BUCKET)
+    .list(userId, { limit: 100 });
+
+  if (listError || !listed?.length) return;
+
+  const paths = listed
+    .filter((f) => f.name && !f.name.endsWith("/"))
+    .map((f) => `${userId}/${f.name}`);
+
+  if (paths.length) {
+    await supabase.storage.from(AVATAR_BUCKET).remove(paths);
+  }
+}
+
+function storageSetupHint(message: string) {
+  if (
+    /bucket not found|not found|row-level security|policy|unauthorized|permission|jwt/i.test(
+      message
+    )
+  ) {
+    return `${message} — Run supabase/fix-avatars-storage.sql in the Supabase SQL Editor, then try again.`;
+  }
+  return message;
+}
+
 interface UserState {
   user: UserProfile | null;
   isAuthenticated: boolean;
@@ -18,6 +77,7 @@ interface UserState {
     username: string;
   }) => Promise<{ error: string | null }>;
   updateAvatar: (file: File) => Promise<{ error: string | null }>;
+  removeAvatar: () => Promise<{ error: string | null }>;
   logout: () => Promise<void>;
   initializeAuth: () => Promise<void>;
 }
@@ -138,48 +198,46 @@ export const useUserStore = create<UserState>()(
         const current = get().user;
         if (!current) return { error: "Not logged in." };
 
-        const allowed = ["image/jpeg", "image/png", "image/webp", "image/gif"];
-        if (!allowed.includes(file.type)) {
+        const kind = guessImageType(file);
+        if (!kind) {
           return { error: "Use a JPG, PNG, WebP, or GIF image." };
         }
-        if (file.size > 2 * 1024 * 1024) {
+        if (file.size > MAX_AVATAR_BYTES) {
           return { error: "Image must be under 2MB." };
         }
 
-        const ext =
-          file.type === "image/png"
-            ? "png"
-            : file.type === "image/webp"
-              ? "webp"
-              : file.type === "image/gif"
-                ? "gif"
-                : "jpg";
-        const path = `${current.id}/avatar.${ext}`;
+        // Ensure session is fresh so storage RLS sees auth.uid()
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (!sessionData.session) {
+          return { error: "Session expired. Please log in again." };
+        }
 
+        // Clear previous files so replace works even without upsert policies
+        await clearUserAvatarFiles(current.id);
+
+        const path = `${current.id}/avatar.${kind.ext}`;
         const { error: uploadError } = await supabase.storage
-          .from("avatars")
+          .from(AVATAR_BUCKET)
           .upload(path, file, {
             upsert: true,
-            contentType: file.type,
+            contentType: kind.mime,
             cacheControl: "3600",
           });
 
         if (uploadError) {
-          return { error: uploadError.message };
+          return { error: storageSetupHint(uploadError.message) };
         }
 
         const { data: publicData } = supabase.storage
-          .from("avatars")
+          .from(AVATAR_BUCKET)
           .getPublicUrl(path);
 
-        // Bust browser cache after re-upload
+        // Bust browser / CDN cache after re-upload
         const avatarUrl = `${publicData.publicUrl}?t=${Date.now()}`;
 
         const { data: updatedRows, error: updateError } = await supabase
           .from("profiles")
-          .update({
-            avatar_url: avatarUrl,
-          })
+          .update({ avatar_url: avatarUrl })
           .eq("id", current.id)
           .select("id");
 
@@ -195,14 +253,14 @@ export const useUserStore = create<UserState>()(
         }
 
         if (profileError) {
-          const msg = profileError.message || "Failed to update avatar.";
+          const msg = profileError.message || "Failed to save avatar on profile.";
           if (/bigint/i.test(msg) && /uuid|invalid input syntax/i.test(msg)) {
             return {
               error:
                 "Database profile id type is wrong (bigint vs uuid). Run supabase/fix-profiles-uuid.sql in the Supabase SQL Editor, then try again.",
             };
           }
-          return { error: msg };
+          return { error: storageSetupHint(msg) };
         }
 
         await supabase.auth.updateUser({
@@ -213,6 +271,59 @@ export const useUserStore = create<UserState>()(
           user: {
             ...current,
             avatar: avatarUrl,
+          },
+        });
+
+        return { error: null };
+      },
+
+      removeAvatar: async () => {
+        const current = get().user;
+        if (!current) return { error: "Not logged in." };
+
+        if (!isCustomAvatar(current.avatar)) {
+          return { error: "No custom profile photo to remove." };
+        }
+
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (!sessionData.session) {
+          return { error: "Session expired. Please log in again." };
+        }
+
+        // Best-effort storage cleanup (profile row still cleared if this fails)
+        await clearUserAvatarFiles(current.id);
+
+        const fallback = defaultAvatarUrl(current.id);
+
+        const { data: updatedRows, error: updateError } = await supabase
+          .from("profiles")
+          .update({ avatar_url: null })
+          .eq("id", current.id)
+          .select("id");
+
+        let profileError = updateError;
+        if (!profileError && (!updatedRows || updatedRows.length === 0)) {
+          const { error: insertError } = await supabase.from("profiles").insert({
+            id: current.id,
+            avatar_url: null,
+            username: current.username,
+            full_name: current.name,
+          });
+          profileError = insertError;
+        }
+
+        if (profileError) {
+          return { error: storageSetupHint(profileError.message || "Failed to remove photo.") };
+        }
+
+        await supabase.auth.updateUser({
+          data: { avatar_url: null },
+        });
+
+        set({
+          user: {
+            ...current,
+            avatar: fallback,
           },
         });
 
@@ -282,9 +393,7 @@ export const useUserStore = create<UserState>()(
               username: profile?.username || metaUsername,
               name: profile?.full_name || metaFullName,
               email: session.user.email || "",
-              avatar:
-                profile?.avatar_url ||
-                `https://api.dicebear.com/7.x/avataaars/svg?seed=${session.user.id}`,
+              avatar: profile?.avatar_url || defaultAvatarUrl(session.user.id),
               bio: profile?.bio || "",
               country: profile?.country || "",
 
