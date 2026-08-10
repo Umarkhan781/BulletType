@@ -79,14 +79,40 @@ export const useUserStore = create<UserState>()(
           return { error: "Username must be at least 3 characters." };
         }
 
-        const { error: profileError } = await supabase.from("profiles").upsert({
-          id: current.id,
-          full_name: cleanName,
-          username: cleanUsername,
-        });
+        // Prefer update of existing row; insert only if missing
+        const { data: updatedRows, error: updateError } = await supabase
+          .from("profiles")
+          .update({
+            full_name: cleanName,
+            username: cleanUsername,
+          })
+          .eq("id", current.id)
+          .select("id");
+
+        let profileError = updateError;
+
+        if (!profileError && (!updatedRows || updatedRows.length === 0)) {
+          const { error: insertError } = await supabase.from("profiles").insert({
+            id: current.id,
+            full_name: cleanName,
+            username: cleanUsername,
+          });
+          profileError = insertError;
+        }
 
         if (profileError) {
-          return { error: profileError.message };
+          const msg = profileError.message || "Failed to update profile.";
+          // Common misconfigured Supabase schema (profiles.id as bigint)
+          if (/bigint/i.test(msg) && /uuid|invalid input syntax/i.test(msg)) {
+            return {
+              error:
+                "Database profile id type is wrong (bigint vs uuid). Run supabase/fix-profiles-uuid.sql in the Supabase SQL Editor, then try again.",
+            };
+          }
+          if (/duplicate key|unique/i.test(msg)) {
+            return { error: "That username is already taken." };
+          }
+          return { error: msg };
         }
 
         // Keep auth metadata in sync (used as fallback on login)
@@ -149,15 +175,34 @@ export const useUserStore = create<UserState>()(
         // Bust browser cache after re-upload
         const avatarUrl = `${publicData.publicUrl}?t=${Date.now()}`;
 
-        const { error: profileError } = await supabase.from("profiles").upsert({
-          id: current.id,
-          avatar_url: avatarUrl,
-          username: current.username,
-          full_name: current.name,
-        });
+        const { data: updatedRows, error: updateError } = await supabase
+          .from("profiles")
+          .update({
+            avatar_url: avatarUrl,
+          })
+          .eq("id", current.id)
+          .select("id");
+
+        let profileError = updateError;
+        if (!profileError && (!updatedRows || updatedRows.length === 0)) {
+          const { error: insertError } = await supabase.from("profiles").insert({
+            id: current.id,
+            avatar_url: avatarUrl,
+            username: current.username,
+            full_name: current.name,
+          });
+          profileError = insertError;
+        }
 
         if (profileError) {
-          return { error: profileError.message };
+          const msg = profileError.message || "Failed to update avatar.";
+          if (/bigint/i.test(msg) && /uuid|invalid input syntax/i.test(msg)) {
+            return {
+              error:
+                "Database profile id type is wrong (bigint vs uuid). Run supabase/fix-profiles-uuid.sql in the Supabase SQL Editor, then try again.",
+            };
+          }
+          return { error: msg };
         }
 
         await supabase.auth.updateUser({
