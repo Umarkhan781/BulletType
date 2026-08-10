@@ -250,7 +250,7 @@ export default function AdminPage() {
       color: "text-amber-400",
     },
     {
-      label: "Total Users",
+      label: "Registered Users",
       value: stats.totalUsers,
       icon: Users,
       color: "text-purple-400",
