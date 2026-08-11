@@ -91,33 +91,62 @@ export const useUserStore = create<UserState>()(
       setUser: (user) =>
         set({ user, isAuthenticated: !!user }),
 
-      addTestResult: (result) =>
-        set((state) => {
-          const newTests = [result, ...state.recentTests].slice(0, 20);
-          if (!state.user) return { recentTests: newTests };
+      addTestResult: (result) => {
+        const currentUser = get().user;
+        const recentTests = [result, ...get().recentTests].slice(0, 20);
 
-          const totalTests = state.user.totalTests + 1;
-          const highestWpm = Math.max(state.user.highestWpm, result.wpm);
-          const averageWpm = Math.round(
-            (state.user.averageWpm * state.user.totalTests + result.wpm) / totalTests
-          );
-          const accuracy =
-            Math.round(
-              ((state.user.accuracy * state.user.totalTests + result.accuracy) / totalTests) * 10
-            ) / 10;
+        if (!currentUser) {
+          set({ recentTests });
+          return;
+        }
 
-          return {
-            recentTests: newTests,
-            user: {
-              ...state.user,
-              totalTests,
-              highestWpm,
-              averageWpm,
-              accuracy,
-              xp: state.user.xp + Math.round(result.wpm * (result.accuracy / 100)),
-            },
-          };
-        }),
+        const totalTests = currentUser.totalTests + 1;
+        const highestWpm = Math.max(currentUser.highestWpm, result.wpm);
+        const averageWpm = Math.round(
+          (currentUser.averageWpm * currentUser.totalTests + result.wpm) /
+            totalTests
+        );
+        const accuracy =
+          Math.round(
+            ((currentUser.accuracy * currentUser.totalTests + result.accuracy) /
+              totalTests) *
+              10
+          ) / 10;
+        const practiceTime =
+          currentUser.practiceTime + Math.max(1, Math.ceil(result.timeElapsed / 60));
+        const xp =
+          currentUser.xp + Math.round(result.wpm * (result.accuracy / 100));
+        const updatedUser = {
+          ...currentUser,
+          totalTests,
+          highestWpm,
+          averageWpm,
+          accuracy,
+          practiceTime,
+          xp,
+        };
+
+        // Keep the UI immediate, then persist the same progress for Dashboard
+        // and Profile after a refresh or a later sign-in.
+        set({ recentTests, user: updatedUser });
+
+        void supabase
+          .from("profiles")
+          .update({
+            total_tests: totalTests,
+            highest_wpm: highestWpm,
+            average_wpm: averageWpm,
+            accuracy,
+            practice_time: practiceTime,
+            xp,
+          })
+          .eq("id", currentUser.id)
+          .then(({ error }) => {
+            if (error) {
+              console.warn("[progress] failed to save:", error.message);
+            }
+          });
+      },
 
       updateStats: (stats) =>
         set((state) => ({
