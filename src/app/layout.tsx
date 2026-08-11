@@ -129,13 +129,28 @@ export default function RootLayout({
         />
         <Navbar />
         <main className="flex-1">{children}</main>
-        <footer className="border-t border-white/5 py-8 text-center text-sm text-zinc-500">
+        <footer className="py-8 text-center text-sm text-zinc-500">
           <p>
             Developed by UMAR TECH ·{" "}
             <span className="text-zinc-400">B 2026</span>
           </p>
           <p className="mt-2 text-xs text-zinc-600">
-            Free typing test · WPM practice · Touch typing lessons
+            Contact Us ·{" "}
+            <a
+              href="https://wa.me/923405026367"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="transition-colors hover:text-blue-400"
+            >
+              Whatsapp +923405026367
+            </a>{" "}
+            ·{" "}
+            <a
+              href="mailto:umar092939495@gmail.com"
+              className="transition-colors hover:text-blue-400"
+            >
+              umar092939495@gmail.com
+            </a>
           </p>
         </footer>
       </body>
