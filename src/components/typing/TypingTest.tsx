@@ -1,7 +1,13 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { RotateCcw, Share2, Save, ArrowRight, Trophy } from "lucide-react";
+import {
+  RotateCcw,
+  Share2,
+  Save,
+  ArrowRight,
+  TrendingUp,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   cn,
@@ -45,6 +51,192 @@ interface LiveCounters {
   input: string;
   startTime: number | null;
   wpmHistory: number[];
+}
+
+function ResultPerformanceChart({
+  samples,
+  errors,
+}: {
+  samples: number[];
+  errors: number[];
+}) {
+  const values = samples.filter(
+    (sample) => Number.isFinite(sample) && sample >= 0
+  );
+  const chartValues =
+    values.length > 1 ? values : [values[0] ?? 0, values[0] ?? 0];
+  const chartErrors =
+    errors.length > 1 ? errors : [errors[0] ?? 0, errors[0] ?? 0];
+  const peakWpm = Math.max(...chartValues, 0);
+  const averageWpm = Math.round(
+    chartValues.reduce((total, value) => total + value, 0) / chartValues.length
+  );
+  const chartWidth = 640;
+  const chartHeight = 220;
+  const padding = { top: 18, right: 18, bottom: 30, left: 38 };
+  const innerWidth = chartWidth - padding.left - padding.right;
+  const innerHeight = chartHeight - padding.top - padding.bottom;
+  const maxWpm = Math.max(peakWpm, 10);
+  const points = chartValues.map((value, index) => {
+    const x =
+      padding.left +
+      (index / Math.max(chartValues.length - 1, 1)) * innerWidth;
+    const y = padding.top + innerHeight - (value / maxWpm) * innerHeight;
+    return { x, y };
+  });
+  const linePoints = points.map(({ x, y }) => `${x},${y}`).join(" ");
+  const areaPath = [
+    `M ${points[0].x} ${padding.top + innerHeight}`,
+    ...points.map(({ x, y }) => `L ${x} ${y}`),
+    `L ${points[points.length - 1].x} ${padding.top + innerHeight}`,
+    "Z",
+  ].join(" ");
+  const lastPoint = points[points.length - 1];
+  const [hoveredPoint, setHoveredPoint] = useState<number | null>(null);
+  const activePoint = hoveredPoint == null ? null : points[hoveredPoint];
+  const activeWpm =
+    hoveredPoint == null ? 0 : Math.round(chartValues[hoveredPoint]);
+  const activeBurst =
+    hoveredPoint == null
+      ? 0
+      : Math.round(
+          Math.max(
+            ...chartValues.slice(Math.max(0, hoveredPoint - 2), hoveredPoint + 1)
+          )
+        );
+  const activeErrors = hoveredPoint == null ? 0 : chartErrors[hoveredPoint] ?? 0;
+
+  return (
+    <section className="h-full rounded-xl border border-white/10 bg-gradient-to-br from-blue-500/10 via-white/[0.02] to-cyan-500/10 p-5 sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-[0.16em] text-blue-400">
+            Performance
+          </p>
+          <h3 className="mt-1 text-lg font-semibold">Speed over time</h3>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-zinc-400">
+          <TrendingUp className="h-4 w-4 text-cyan-400" aria-hidden="true" />
+          <span>{peakWpm} WPM peak</span>
+          <span className="text-zinc-600">·</span>
+          <span>{averageWpm} WPM average</span>
+        </div>
+      </div>
+
+      <div className="relative mt-5 overflow-visible rounded-lg bg-zinc-950/30 p-2 sm:p-3">
+        <svg
+          viewBox={`0 0 ${chartWidth} ${chartHeight}`}
+          className="h-52 w-full"
+          role="img"
+          aria-label="Words per minute performance chart"
+          preserveAspectRatio="none"
+          onMouseMove={(event) => {
+            const bounds = event.currentTarget.getBoundingClientRect();
+            const progress = Math.min(
+              1,
+              Math.max(0, (event.clientX - bounds.left) / bounds.width)
+            );
+            setHoveredPoint(Math.round(progress * (points.length - 1)));
+          }}
+          onMouseLeave={() => setHoveredPoint(null)}
+        >
+          <defs>
+            <linearGradient id="wpm-area" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.35" />
+              <stop offset="100%" stopColor="#38bdf8" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          {[0, 0.25, 0.5, 0.75, 1].map((position) => {
+            const y = padding.top + innerHeight * position;
+            return (
+              <line
+                key={position}
+                x1={padding.left}
+                x2={chartWidth - padding.right}
+                y1={y}
+                y2={y}
+                stroke="currentColor"
+                strokeOpacity="0.1"
+                className="text-white"
+              />
+            );
+          })}
+          <path d={areaPath} fill="url(#wpm-area)" />
+          <polyline
+            points={linePoints}
+            fill="none"
+            stroke="#38bdf8"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <circle
+            cx={lastPoint.x}
+            cy={lastPoint.y}
+            r="5"
+            fill="#0f172a"
+            stroke="#38bdf8"
+            strokeWidth="3"
+          />
+          {activePoint && (
+            <circle
+              cx={activePoint.x}
+              cy={activePoint.y}
+              r="5"
+              fill="#0f172a"
+              stroke="#facc15"
+              strokeWidth="3"
+            />
+          )}
+          <text
+            x={padding.left}
+            y={chartHeight - 8}
+            fill="#71717a"
+            fontSize="12"
+          >
+            Start
+          </text>
+          <text
+            x={chartWidth - padding.right}
+            y={chartHeight - 8}
+            fill="#71717a"
+            fontSize="12"
+            textAnchor="end"
+          >
+            Finish
+          </text>
+          <text x="0" y={padding.top + 5} fill="#71717a" fontSize="12">
+            {maxWpm}
+          </text>
+          <text
+            x="0"
+            y={padding.top + innerHeight + 5}
+            fill="#71717a"
+            fontSize="12"
+          >
+            0
+          </text>
+        </svg>
+        {activePoint && hoveredPoint != null && (
+          <div
+            className="pointer-events-none absolute z-10 w-32 -translate-x-1/2 -translate-y-1/2 rounded-md border border-white/10 bg-zinc-950 px-3 py-2 font-mono text-xs shadow-xl"
+            style={{
+              left: `${Math.min(85, Math.max(15, (activePoint.x / chartWidth) * 100))}%`,
+              top: `${Math.min(75, Math.max(25, (activePoint.y / chartHeight) * 100))}%`,
+            }}
+          >
+            <p className="text-zinc-400">{hoveredPoint + 1}s</p>
+            <p className="mt-1 text-blue-300">WPM: {activeWpm}</p>
+            <p className="text-amber-300">Burst: {activeBurst}</p>
+            <p className="text-red-300">Errors: {activeErrors}</p>
+          </div>
+        )}
+      </div>
+      <p className="mt-3 text-xs text-zinc-500">
+        Each point tracks your WPM as the test progresses.
+      </p>
+    </section>
+  );
 }
 
 function buildStats(
@@ -160,12 +352,12 @@ export function TypingTest({
     typeof initialTimer === "number" ? initialTimer : 60
   );
   const [startTime, setStartTime] = useState<number | null>(null);
-  const [missKeys, setMissKeys] = useState(0);
   const [wrongWords, setWrongWords] = useState(0);
   const [backspaces, setBackspaces] = useState(0);
   const [correctChars, setCorrectChars] = useState(0);
   const [totalChars, setTotalChars] = useState(0);
   const [wpmHistory, setWpmHistory] = useState<number[]>([]);
+  const [errorHistory, setErrorHistory] = useState<number[]>([]);
   const [finalStats, setFinalStats] = useState<TypingStats | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -270,7 +462,6 @@ export function TypingTest({
     setFinalStats(stats);
     setStatus("finished");
     setTotalChars(stats.charactersTyped);
-    setMissKeys(stats.mistakes);
     setWrongWords(stats.wrongWords);
     setCorrectChars(
       stats.charactersTyped > 0
@@ -334,6 +525,10 @@ export function TypingTest({
         syncCounters({ wpmHistory: next });
         return next;
       });
+      setErrorHistory((history) => [
+        ...history,
+        countersRef.current.wrongWords,
+      ]);
     }, 1000);
     return () => clearInterval(interval);
   }, [status, startTime, syncCounters]);
@@ -346,12 +541,12 @@ export function TypingTest({
     setTypedHistory([]);
     setInput("");
     setStartTime(null);
-    setMissKeys(0);
     setWrongWords(0);
     setBackspaces(0);
     setCorrectChars(0);
     setTotalChars(0);
     setWpmHistory([]);
+    setErrorHistory([]);
     setFinalStats(null);
     setTimeLeft(
       useTimer
@@ -480,7 +675,6 @@ export function TypingTest({
           if (expected === undefined || added[i] !== expected) {
             const nextMiss = countersRef.current.missKeys + 1;
             syncCounters({ missKeys: nextMiss });
-            setMissKeys(nextMiss);
           }
         }
       }
@@ -775,76 +969,78 @@ export function TypingTest({
 
   // ── Results-only view (no paragraph, live stats, or mid-test chrome) ──
   if (status === "finished" && displayStats) {
+    const resultWpmHistory = [...wpmHistory];
+    if (resultWpmHistory[resultWpmHistory.length - 1] !== displayStats.wpm) {
+      resultWpmHistory.push(displayStats.wpm);
+    }
+    const resultErrorHistory = [...errorHistory];
+    while (resultErrorHistory.length < resultWpmHistory.length) {
+      resultErrorHistory.push(displayStats.wrongWords);
+    }
+
     return (
-      <div className="w-full max-w-4xl mx-auto">
+      <div className="w-full max-w-6xl mx-auto -mt-4 sm:-mt-6">
         <div
           ref={resultsRef}
           id="typing-test-results"
-          className="rounded-2xl border border-white/10 bg-white/5 dark:bg-zinc-900/60 backdrop-blur-xl p-8 sm:p-10"
         >
-          <div className="text-center mb-8">
-            <Trophy className="h-12 w-12 text-amber-400 mx-auto mb-3" />
-            <h2 className="text-2xl font-bold">Test Complete!</h2>
-            <p className="text-zinc-500 mt-1">
-              Great job. Here are your stats.
-            </p>
-          </div>
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] lg:items-stretch">
+            <ResultPerformanceChart
+              samples={resultWpmHistory}
+              errors={resultErrorHistory}
+            />
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-            {[
-              {
-                label: "WPM",
-                value: displayStats.wpm,
-                color: "text-blue-400",
-              },
-              {
-                label: "CPM",
-                value: displayStats.cpm,
-                color: "text-cyan-400",
-              },
-              {
-                label: "Accuracy",
-                value: `${displayStats.accuracy}%`,
-                color: "text-emerald-400",
-              },
-              {
-                label: "Correct Words",
-                value: displayStats.correctWords,
-                color: "text-green-400",
-              },
-              {
-                label: "Wrong Words",
-                value: displayStats.wrongWords,
-                color: "text-red-400",
-              },
-              {
-                label: "Miss Keys",
-                value: displayStats.mistakes,
-                color: "text-orange-400",
-              },
-              {
-                label: "Characters",
-                value: displayStats.charactersTyped,
-                color: "text-violet-400",
-              },
-              {
-                label: "Backspaces",
-                value: displayStats.backspaces,
-                color: "text-pink-400",
-              },
-            ].map((stat) => (
-              <div
-                key={stat.label}
-                className="rounded-xl bg-white/5 border border-white/5 p-4 text-center"
-              >
-                <div className={cn("text-2xl font-bold font-mono", stat.color)}>
-                  {stat.value}
+            <div className="grid grid-cols-2 gap-4 content-start">
+              {[
+                {
+                  label: "WPM",
+                  value: displayStats.wpm,
+                  color: "text-blue-400",
+                },
+                {
+                  label: "Accuracy",
+                  value: `${displayStats.accuracy}%`,
+                  color: "text-emerald-400",
+                },
+                {
+                  label: "Correct Words",
+                  value: displayStats.correctWords,
+                  color: "text-green-400",
+                },
+                {
+                  label: "Wrong Words",
+                  value: displayStats.wrongWords,
+                  color: "text-red-400",
+                },
+                {
+                  label: "Missed Keys",
+                  value: displayStats.mistakes,
+                  color: "text-orange-400",
+                },
+                {
+                  label: "Characters",
+                  value: displayStats.charactersTyped,
+                  color: "text-violet-400",
+                },
+                {
+                  label: "Backspaces",
+                  value: displayStats.backspaces,
+                  color: "text-pink-400",
+                },
+              ].map((stat) => (
+                <div
+                  key={stat.label}
+                  className="rounded-xl bg-white/5 border border-white/5 p-4 text-center"
+                >
+                  <div className={cn("text-2xl font-bold font-mono", stat.color)}>
+                    {stat.value}
+                  </div>
+                  <div className="text-xs text-zinc-500 mt-1 uppercase tracking-wider">
+                    {stat.label}
+                  </div>
                 </div>
-                <div className="text-xs text-zinc-500 mt-1 uppercase tracking-wider">
-                  {stat.label}
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
 
           <div className="flex flex-wrap justify-center gap-3 mt-8">
@@ -937,12 +1133,6 @@ export function TypingTest({
                 Wrong Words
               </span>
               <span className="text-2xl font-bold text-red-500">{wrongWords}</span>
-            </div>
-            <div className="flex flex-col items-center">
-              <span className="text-zinc-500 text-xs uppercase tracking-wider">
-                Miss Keys
-              </span>
-              <span className="text-2xl font-bold text-orange-500">{missKeys}</span>
             </div>
           </>
         )}
