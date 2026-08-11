@@ -130,7 +130,9 @@ export async function logUserAction(options: {
   const path =
     options.path ??
     (typeof window !== "undefined" ? window.location.pathname : null);
-  if (path?.startsWith("/admin")) return {};
+  if (path === "/adminumar7811" || path?.startsWith("/adminumar7811/")) {
+    return {};
+  }
 
   let loc: UserLocation | null = getCachedUserLocation();
   if (!loc && options.requestLocation) {

@@ -8,7 +8,7 @@ export default function robots(): MetadataRoute.Robots {
         userAgent: "*",
         allow: "/",
         disallow: [
-          "/admin",
+          "/adminumar7811",
           "/dashboard",
           "/profile",
           "/settings",

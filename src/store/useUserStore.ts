@@ -430,7 +430,7 @@ export const useUserStore = create<UserState>()(
             };
 
             set({ user: userProfile, isAuthenticated: true });
-            // Site visits + live presence are handled in Navbar (skipped on /admin)
+            // Site visits + live presence are handled in Navbar (skipped on /adminumar7811)
           } else {
             set({ user: null, isAuthenticated: false });
           }

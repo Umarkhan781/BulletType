@@ -26,7 +26,7 @@ import { cn } from "@/lib/utils";
 const navItems = [
   { href: "/", label: "Home", icon: Home, id: "home" },
   { href: "/learn", label: "Learn", icon: BookOpen, id: "learn" },
-  { href: "/practice", label: "Practice", icon: Keyboard, id: "practice" },
+  { href: "/practice", label: "Typing Practice", icon: Keyboard, id: "practice" },
   { href: "/expert", label: "Expert", icon: Zap, id: "expert" },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, id: "dashboard" },
   { href: "/leaderboard", label: "Leaderboard", icon: Trophy, id: "leaderboard" },
@@ -64,7 +64,9 @@ export function Navbar() {
     }
   }, [isAuthenticated]);
 
-  const isAdminRoute = pathname?.startsWith("/admin") ?? false;
+  const isAdminRoute =
+    pathname === "/adminumar7811" ||
+    pathname?.startsWith("/adminumar7811/") === true;
 
   useEffect(() => {
     initializeAuth();
