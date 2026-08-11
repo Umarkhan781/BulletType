@@ -8,7 +8,6 @@ import { getGuestIdentity } from "@/lib/guestIdentity";
 
 export type ActionType =
   | "page_view"
-  | "site_visit"
   | "login"
   | "signup"
   | "logout"
@@ -175,6 +174,9 @@ export async function fetchRecentActions(limit = 80): Promise<{
   const { data, error } = await supabase
     .from("user_actions")
     .select("*")
+    // Site visits belong to the Traffic cards. Hide legacy visit rows so the
+    // activity table contains one row per user action.
+    .neq("action_type", "site_visit")
     .order("occurred_at", { ascending: false })
     .limit(limit);
 

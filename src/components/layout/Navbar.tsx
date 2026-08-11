@@ -16,7 +16,7 @@ import {
   Menu,
   X,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { applyThemeClass, useSettingsStore } from "@/store/useSettingsStore";
 import { useUserStore } from "@/store/useUserStore";
 import { supabase } from "@/lib/supabase";
@@ -32,6 +32,19 @@ const navItems = [
   { href: "/leaderboard", label: "Leaderboard", icon: Trophy, id: "leaderboard" },
 ] as const;
 
+function pageName(pathname: string) {
+  if (pathname === "/") return "Home";
+
+  return pathname
+    .split("/")
+    .filter(Boolean)
+    .map((segment) => {
+      const words = segment.replace(/[-_]/g, " ");
+      return words.charAt(0).toUpperCase() + words.slice(1);
+    })
+    .join(" / ");
+}
+
 export function Navbar() {
   const pathname = usePathname();
   const { theme, setTheme } = useSettingsStore();
@@ -39,6 +52,7 @@ export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [guestUsername, setGuestUsername] = useState<string | null>(null);
+  const lastLoggedPageRef = useRef<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -83,7 +97,6 @@ export function Navbar() {
     void (async () => {
       const { recordSiteVisit } = await import("@/lib/visits");
       const { startPresenceTracking } = await import("@/lib/presence");
-      const { logUserAction } = await import("@/lib/activity");
       const { requestUserLocation } = await import("@/lib/location");
       const {
         data: { session },
@@ -95,13 +108,6 @@ export function Navbar() {
 
       await recordSiteVisit(uid);
       stopPresence = startPresenceTracking(uid);
-
-      await logUserAction({
-        actionType: "site_visit",
-        path: typeof window !== "undefined" ? window.location.pathname : "/",
-        userId: uid,
-        details: uid ? "registered" : "guest",
-      });
     })();
 
     const {
@@ -111,7 +117,6 @@ export function Navbar() {
         setTimeout(async () => {
           const { recordSiteVisit } = await import("@/lib/visits");
           const { startPresenceTracking } = await import("@/lib/presence");
-          const { logUserAction } = await import("@/lib/activity");
           const {
             data: { session },
           } = await supabase.auth.getSession();
@@ -119,12 +124,6 @@ export function Navbar() {
           await recordSiteVisit(uid);
           stopPresence?.();
           stopPresence = startPresenceTracking(uid);
-          await logUserAction({
-            actionType: "login",
-            path: typeof window !== "undefined" ? window.location.pathname : "/",
-            userId: uid,
-            details: "signed in",
-          });
         }, 0);
       }
       if (event === "SIGNED_OUT") {
@@ -154,18 +153,25 @@ export function Navbar() {
 
   // Log page views when navigating (non-admin)
   useEffect(() => {
-    if (isAdminRoute || !pathname) return;
+    if (isAdminRoute || !pathname) {
+      lastLoggedPageRef.current = null;
+      return;
+    }
+
+    // Auth hydration can rerun this effect for the same route. A page open is
+    // one action, so write it once and let the next navigation create a row.
+    if (lastLoggedPageRef.current === pathname) return;
+    lastLoggedPageRef.current = pathname;
 
     void (async () => {
       const { logUserAction } = await import("@/lib/activity");
       await logUserAction({
         actionType: "page_view",
         path: pathname,
-        userId: user?.id ?? null,
-        details: `Opened ${pathname}`,
+        details: `Opened ${pageName(pathname)}`,
       });
     })();
-  }, [isAdminRoute, pathname, user?.id]);
+  }, [isAdminRoute, pathname]);
 
   const toggleTheme = () => {
     // Cycle: dark → light → dark (dark is product default)
