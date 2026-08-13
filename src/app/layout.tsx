@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Navbar } from "@/components/layout/Navbar";
+import { SiteFooter } from "@/components/layout/SiteFooter";
+import { CookieConsent } from "@/components/layout/CookieConsent";
 import { DEFAULT_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/seo";
 
 const geistSans = Geist({
@@ -12,6 +14,13 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  variable: "--font-jetbrains-mono",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -66,23 +75,23 @@ export const metadata: Metadata = {
     },
   },
   icons: {
-    // ?v=bt2 busts browser cache of the old keyboard photo favicon
+    // ?v=bt3 busts cache of the previous blue BT mark
     icon: [
-      { url: "/favicon.svg?v=bt2", type: "image/svg+xml" },
-      { url: "/favicon-32.png?v=bt2", sizes: "32x32", type: "image/png" },
-      { url: "/icon-192.png?v=bt2", sizes: "192x192", type: "image/png" },
-      { url: "/icon-512.png?v=bt2", sizes: "512x512", type: "image/png" },
-      { url: "/favicon.ico?v=bt2", sizes: "any" },
+      { url: "/favicon.svg?v=bt3", type: "image/svg+xml" },
+      { url: "/favicon-32.png?v=bt3", sizes: "32x32", type: "image/png" },
+      { url: "/icon-192.png?v=bt3", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png?v=bt3", sizes: "512x512", type: "image/png" },
+      { url: "/favicon.ico?v=bt3", sizes: "any" },
     ],
-    apple: [{ url: "/apple-icon.png?v=bt2", sizes: "180x180", type: "image/png" }],
-    shortcut: "/favicon-32.png?v=bt2",
+    apple: [{ url: "/apple-icon.png?v=bt3", sizes: "180x180", type: "image/png" }],
+    shortcut: "/favicon.svg?v=bt3",
   },
 };
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#fafafa" },
-    { media: "(prefers-color-scheme: dark)", color: "#09090b" },
+    { media: "(prefers-color-scheme: light)", color: "#173024" },
+    { media: "(prefers-color-scheme: dark)", color: "#173024" },
   ],
   width: "device-width",
   initialScale: 1,
@@ -112,47 +121,27 @@ export default function RootLayout({
     },
   };
 
-  // Inline boot script as string for beforeInteractive-free dark default
-  const themeBoot = `(function(){try{var d=document.documentElement;d.classList.add("dark");var raw=localStorage.getItem("typing-master-settings");if(!raw)return;var p=JSON.parse(raw);var t=(p&&p.state&&p.state.theme)||"dark";if(t==="light")d.classList.remove("dark");else d.classList.add("dark");}catch(e){document.documentElement.classList.add("dark");}})();`;
+  // Inline boot script: Forest is the product default
+  const themeBoot = `(function(){var d=document.documentElement;var valid={dark:1,light:1,ocean:1,forest:1,sunset:1,lavender:1,midnight:1,rose:1,emerald:1,mono:1};var t="forest";try{var allow=/(?:^|; )bt-cookie-consent=allow(?:;|$)/.test(document.cookie);if(allow){var c=document.cookie.match(/(?:^|; )bt-theme=([^;]*)/);if(c){t=decodeURIComponent(c[1]);}else{var raw=localStorage.getItem("typing-master-settings");if(raw){var p=JSON.parse(raw);var s=(p&&p.state&&p.state.theme)||"forest";t=s==="system"?"forest":s==="midnight-blue"?"midnight":s;}}}}catch(e){t="forest";}if(!valid[t])t="forest";d.setAttribute("data-theme",t);if(t==="light")d.classList.remove("dark");else d.classList.add("dark");})();`;
 
   return (
-    <html lang="en" className="dark" suppressHydrationWarning>
+    <html lang="en" className="dark" data-theme="forest" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBoot }} />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} min-h-screen flex flex-col antialiased bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50`}
+        className={`${geistSans.variable} ${geistMono.variable} ${jetbrainsMono.variable} min-h-screen flex flex-col overflow-x-hidden antialiased bg-[var(--background)] text-[var(--foreground)]`}
       >
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
         <Navbar />
-        <main className="flex-1">{children}</main>
-        <footer className="py-8 text-center text-sm text-zinc-500">
-          <p>
-            Developed by UMAR TECH ·{" "}
-            <span className="text-zinc-400">B 2026</span>
-          </p>
-          <p className="mt-2 text-xs text-zinc-600">
-            Contact Us ·{" "}
-            <a
-              href="https://wa.me/923405026367"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="transition-colors hover:text-blue-400"
-            >
-              Whatsapp +923405026367
-            </a>{" "}
-            ·{" "}
-            <a
-              href="mailto:umar092939495@gmail.com"
-              className="transition-colors hover:text-blue-400"
-            >
-              umar092939495@gmail.com
-            </a>
-          </p>
-        </footer>
+        <main className="flex min-h-0 flex-1 flex-col bg-[var(--background)]">
+          {children}
+        </main>
+        <CookieConsent />
+        <SiteFooter />
       </body>
     </html>
   );

@@ -309,6 +309,158 @@ export function getRandomWords(
   return words;
 }
 
+export type ExpertDifficulty = "normal" | "hard" | "extreme";
+
+const NORMAL_SENTENCES = [
+  "The morning light came through the kitchen window and warmed the wooden table.",
+  "She walked to the market and bought fresh bread, apples, and a small jar of honey.",
+  "They spent the afternoon reading beside the river while the city moved slowly around them.",
+  "A good habit is built one quiet day at a time, not in a single burst of effort.",
+  "He asked a simple question, waited for the answer, and then wrote it down carefully.",
+  "The train arrived on time, and the passengers stepped off into cool evening air.",
+  "Children played near the park fountain while their parents talked on a nearby bench.",
+  "You can improve your typing by staying relaxed, looking ahead, and keeping a steady rhythm.",
+  "The library was quiet except for the soft sound of pages turning and chairs sliding back.",
+  "After dinner they washed the dishes, made tea, and planned the rest of the week.",
+  "A clear sentence is easier to type when the words follow a natural order.",
+  "The weather changed quickly, but the road stayed dry enough for a short walk home.",
+  "She opened her notebook, reviewed the last page, and started a new paragraph.",
+  "People remember stories that feel honest, specific, and easy to picture.",
+  "He practiced every evening until the keys felt familiar under his hands.",
+  "The shop owner smiled, counted the change, and handed over a paper bag.",
+  "We crossed the bridge, turned left at the corner, and found the cafe still open.",
+  "Learning takes patience, attention, and a willingness to begin again after a mistake.",
+  "The old radio played a gentle song while rain tapped against the glass.",
+  "They finished the report, checked the numbers, and sent it before the deadline.",
+  "A wide street led toward the station, where a clock hung above the main door.",
+  "She packed a sweater, a book, and a bottle of water for the trip.",
+  "The garden needed water, but the soil was still damp from last night.",
+  "He listened first, then spoke, because the conversation mattered more than speed.",
+  "The teacher wrote a short example on the board and asked the class to follow along.",
+];
+
+const HARD_CONNECTORS = [
+  "meanwhile",
+  "therefore",
+  "however",
+  "nevertheless",
+  "consequently",
+  "although",
+  "whereas",
+  "furthermore",
+];
+
+const EMAIL_HOSTS = ["mail.com", "corp.io", "dev.org", "labs.net", "inbox.co"];
+const EXTREME_SYMBOLS = ["@", "#", "$", "%", "&", "/", "?", "!", "-", "_"];
+
+function sentenceToWords(sentence: string): string[] {
+  return sentence
+    .split(/\s+/)
+    .map((w) => w.trim())
+    .filter(Boolean);
+}
+
+function maybeCaseMix(word: string, chance: number): string {
+  if (!/^[A-Za-z]/.test(word) || Math.random() >= chance) return word;
+  const mode = Math.random();
+  if (mode < 0.45) return word[0]!.toUpperCase() + word.slice(1);
+  if (mode < 0.75) return word.toUpperCase();
+  return word
+    .split("")
+    .map((ch, i) => (i % 2 === 0 ? ch.toUpperCase() : ch.toLowerCase()))
+    .join("");
+}
+
+function attachSymbol(word: string): string {
+  const mark = pick(EXTREME_SYMBOLS);
+  const form = Math.random();
+  if (form < 0.25) return `${mark}${word}`;
+  if (form < 0.5) return `${word}${mark}`;
+  if (form < 0.75) return `${word}${mark}${pick(["ok", "id", "v2", "01"])}`;
+  return `${mark}${word}${mark}`;
+}
+
+function emailFragment(): string {
+  const user = pick(highLevelWords).toLowerCase().slice(0, 10);
+  return `${user}${Math.floor(Math.random() * 90) + 10}@${pick(EMAIL_HOSTS)}`;
+}
+
+function codeFragment(): string {
+  const name = pick(["userId", "retryCount", "payload", "hashKey", "offset"]);
+  const forms = [
+    `${name}=${Math.floor(Math.random() * 900) + 100}`,
+    `fn(${name})`,
+    `${name}[${Math.floor(Math.random() * 8)}]`,
+    `/${name}/${pick(["v1", "raw", "tmp"])}`,
+    `${name}_${pick(["max", "min", "avg"])}`,
+  ];
+  return pick(forms);
+}
+
+function fillFromSentences(count: number, pool: string[]): string[] {
+  const words: string[] = [];
+  while (words.length < count) {
+    words.push(...sentenceToWords(pick(pool)));
+  }
+  return words.slice(0, count);
+}
+
+export function getExpertChallengeWords(
+  count: number,
+  level: ExpertDifficulty
+): string[] {
+  if (level === "normal") {
+    return fillFromSentences(count, NORMAL_SENTENCES);
+  }
+
+  const words: string[] = [];
+
+  if (level === "hard") {
+    let stream = paragraphWordStream();
+    while (words.length < count) {
+      if (stream.length === 0) stream = paragraphWordStream();
+      let word = stream.shift() || pick(highLevelWords);
+      if (Math.random() < 0.22) word = pick(highLevelWords);
+      if (Math.random() < 0.18) word = pick(HARD_CONNECTORS);
+      if (Math.random() < 0.2) {
+        word = `${word}${Math.floor(Math.random() * 900) + 10}`;
+      }
+      if (Math.random() < 0.28) {
+        word = `${word}${pick([".", ",", ";", ":", "?", "!"])}`;
+      } else if (Math.random() < 0.12) {
+        word = attachSymbol(word);
+      }
+      word = maybeCaseMix(word, 0.28);
+      words.push(word);
+    }
+    return words.slice(0, count);
+  }
+
+  while (words.length < count) {
+    const roll = Math.random();
+    let word: string;
+    if (roll < 0.18) {
+      word = emailFragment();
+    } else if (roll < 0.34) {
+      word = codeFragment();
+    } else if (roll < 0.5) {
+      word = randomNumberToken(true);
+    } else if (roll < 0.78) {
+      word = pick(extremeLevelWords);
+    } else {
+      word = pick(highLevelWords);
+    }
+    if (Math.random() < 0.42) word = attachSymbol(word);
+    if (Math.random() < 0.22) {
+      word = `${word}${pick([".", ",", "?", "!", ";", ":"])}`;
+    }
+    word = maybeCaseMix(word, 0.45);
+    words.push(word);
+  }
+
+  return words.slice(0, count);
+}
+
 export function getRandomSentence(): string {
   return commonSentences[Math.floor(Math.random() * commonSentences.length)];
 }

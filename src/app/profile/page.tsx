@@ -9,6 +9,7 @@ import {
   Target,
   LogOut,
   Pencil,
+  LayoutDashboard,
   X,
   Camera,
   Trash2,
@@ -161,9 +162,17 @@ export default function ProfilePage() {
     return (
       <div className="mx-auto max-w-3xl px-4 py-20 text-center">
         <p className="text-zinc-500 mb-4">You are not logged in.</p>
-        <Link href="/login">
-          <Button>Login</Button>
-        </Link>
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <Link href="/dashboard">
+            <Button variant="outline" className="gap-2">
+              <LayoutDashboard className="h-4 w-4" />
+              Dashboard
+            </Button>
+          </Link>
+          <Link href="/login">
+            <Button>Login</Button>
+          </Link>
+        </div>
       </div>
     );
   }
@@ -256,6 +265,19 @@ export default function ProfilePage() {
             </div>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-2 shrink-0">
+            <Link href="/dashboard">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="gap-2"
+                aria-label="Open dashboard"
+                title="Dashboard"
+              >
+                <LayoutDashboard className="h-4 w-4" />
+                Dashboard
+              </Button>
+            </Link>
             {!editing && (
               <Button
                 type="button"

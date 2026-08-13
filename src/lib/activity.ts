@@ -1,9 +1,5 @@
 import { supabase } from "@/lib/supabase";
-import {
-  getCachedUserLocation,
-  requestUserLocation,
-  type UserLocation,
-} from "@/lib/location";
+import { getCachedUserLocation, type UserLocation } from "@/lib/location";
 import { getGuestIdentity } from "@/lib/guestIdentity";
 
 export type ActionType =
@@ -114,15 +110,13 @@ async function resolveActor(userId?: string | null): Promise<{
 
 /**
  * Log a user/guest action for admin Recent Actions history.
- * Location is included only if the user previously allowed (or allows now).
+ * Never requests browser location. Cached labels (if any) stay optional.
  */
 export async function logUserAction(options: {
   actionType: ActionType | string;
   path?: string | null;
   details?: string | null;
   userId?: string | null;
-  /** Request browser location if not cached (shows permission prompt once) */
-  requestLocation?: boolean;
 }): Promise<{ error?: string }> {
   if (typeof window === "undefined") return {};
 
@@ -134,10 +128,7 @@ export async function logUserAction(options: {
     return {};
   }
 
-  let loc: UserLocation | null = getCachedUserLocation();
-  if (!loc && options.requestLocation) {
-    loc = await requestUserLocation();
-  }
+  const loc: UserLocation | null = getCachedUserLocation();
 
   const actor = await resolveActor(options.userId);
 

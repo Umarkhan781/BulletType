@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import {
   RotateCcw,
   Share2,
@@ -16,7 +16,8 @@ import {
   calculateAccuracy,
   formatTime,
 } from "@/lib/utils";
-import { getRandomWords } from "@/lib/words";
+import { getExpertChallengeWords, getRandomWords } from "@/lib/words";
+import type { ExpertDifficulty } from "@/lib/words";
 import { useSettingsStore } from "@/store/useSettingsStore";
 import { useUserStore } from "@/store/useUserStore";
 import type { Difficulty, TimerOption, TypingStats, TestResult } from "@/types";
@@ -31,6 +32,8 @@ interface TypingTestProps {
   /** Override settings store when provided */
   punctuation?: boolean;
   numbers?: boolean;
+  /** Expert practice difficulty (Normal / Hard / Extreme) */
+  expertLevel?: ExpertDifficulty;
   /** Show built-in 15/30/60/120 timer chips (expert page) */
   showTimerControls?: boolean;
   onComplete?: (result: TestResult) => void;
@@ -319,12 +322,12 @@ export function TypingTest({
   testMode = "time",
   punctuation: punctuationProp,
   numbers: numbersProp,
+  expertLevel,
   showTimerControls,
   onComplete,
   onStatusChange,
 }: TypingTestProps) {
   const {
-    fontSize,
     fontFamily,
     punctuation: storePunctuation,
     numbers: storeNumbers,
@@ -363,7 +366,12 @@ export function TypingTest({
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const wordsSurfaceRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const caretRef = useRef<HTMLSpanElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
+  const restartButtonRef = useRef<HTMLButtonElement>(null);
+  const tabArmedRef = useRef(false);
+  const tabArmedTimerRef = useRef<number | null>(null);
   const statusRef = useRef(status);
   const finishedRef = useRef(false);
   const wordsRef = useRef(words);
@@ -416,21 +424,24 @@ export function TypingTest({
         ? Math.max(wordCount, Math.ceil(durationSec * 5), 80)
         : wordCount;
     setWords(
-      getRandomWords(
-        count,
-        mode === "beginner"
-          ? "beginner"
-          : mode === "intermediate"
-            ? "intermediate"
-            : "expert",
-        punctuation,
-        numbers
-      )
+      mode === "expert" && expertLevel
+        ? getExpertChallengeWords(count, expertLevel)
+        : getRandomWords(
+            count,
+            mode === "beginner"
+              ? "beginner"
+              : mode === "intermediate"
+                ? "intermediate"
+                : "expert",
+            punctuation,
+            numbers
+          )
     );
   }, [
     customText,
     wordCount,
     mode,
+    expertLevel,
     punctuation,
     numbers,
     testMode,
@@ -533,47 +544,6 @@ export function TypingTest({
     return () => clearInterval(interval);
   }, [status, startTime, syncCounters]);
 
-  const resetTest = () => {
-    finishedRef.current = false;
-    setStatus("idle");
-    setCurrentWordIndex(0);
-    setCurrentCharIndex(0);
-    setTypedHistory([]);
-    setInput("");
-    setStartTime(null);
-    setWrongWords(0);
-    setBackspaces(0);
-    setCorrectChars(0);
-    setTotalChars(0);
-    setWpmHistory([]);
-    setErrorHistory([]);
-    setFinalStats(null);
-    setTimeLeft(
-      useTimer
-        ? typeof timerOption === "number"
-          ? timerOption
-          : durationSec
-        : durationSec
-    );
-    countersRef.current = {
-      correctChars: 0,
-      totalChars: 0,
-      missKeys: 0,
-      wrongWords: 0,
-      backspaces: 0,
-      typedHistory: [],
-      currentWordIndex: 0,
-      input: "",
-      startTime: null,
-      wpmHistory: [],
-    };
-    generateWords();
-    // Focus after restart without scrolling the page
-    requestAnimationFrame(() => {
-      focusInput();
-    });
-  };
-
   const ensureStarted = () => {
     if (statusRef.current === "idle") {
       const now = Date.now();
@@ -647,6 +617,52 @@ export function TypingTest({
       requestAnimationFrame(() => window.scrollTo(sx, sy));
     }
   }, []);
+
+  const resetTest = useCallback(() => {
+    finishedRef.current = false;
+    tabArmedRef.current = false;
+    setStatus("idle");
+    setCurrentWordIndex(0);
+    setCurrentCharIndex(0);
+    setTypedHistory([]);
+    setInput("");
+    setStartTime(null);
+    setWrongWords(0);
+    setBackspaces(0);
+    setCorrectChars(0);
+    setTotalChars(0);
+    setWpmHistory([]);
+    setErrorHistory([]);
+    setFinalStats(null);
+    setTimeLeft(
+      useTimer
+        ? typeof timerOption === "number"
+          ? timerOption
+          : durationSec
+        : durationSec
+    );
+    countersRef.current = {
+      correctChars: 0,
+      totalChars: 0,
+      missKeys: 0,
+      wrongWords: 0,
+      backspaces: 0,
+      typedHistory: [],
+      currentWordIndex: 0,
+      input: "",
+      startTime: null,
+      wpmHistory: [],
+    };
+    generateWords();
+    requestAnimationFrame(() => {
+      focusInput();
+    });
+  }, [useTimer, timerOption, durationSec, generateWords, focusInput]);
+
+  const resetTestRef = useRef(resetTest);
+  useEffect(() => {
+    resetTestRef.current = resetTest;
+  }, [resetTest]);
 
   /** Apply typed string (shared by input onChange and global first-key capture) */
   const applyTypedValue = useCallback(
@@ -726,7 +742,39 @@ export function TypingTest({
   const completeWordRef = useRef(completeWord);
   completeWordRef.current = completeWord;
 
+  const armRestartFromTab = () => {
+    tabArmedRef.current = true;
+    if (tabArmedTimerRef.current != null) {
+      window.clearTimeout(tabArmedTimerRef.current);
+    }
+    tabArmedTimerRef.current = window.setTimeout(() => {
+      tabArmedRef.current = false;
+      tabArmedTimerRef.current = null;
+    }, 1600);
+    restartButtonRef.current?.focus({ preventScroll: true });
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Tab") {
+      e.preventDefault();
+      armRestartFromTab();
+      return;
+    }
+
+    if (e.key === "Escape") {
+      e.preventDefault();
+      tabArmedRef.current = false;
+      inputRef.current?.blur();
+      return;
+    }
+
+    if (e.key === "Enter" && tabArmedRef.current) {
+      e.preventDefault();
+      tabArmedRef.current = false;
+      resetTest();
+      return;
+    }
+
     if (status === "finished" || finishedRef.current) {
       e.preventDefault();
       return;
@@ -786,18 +834,73 @@ export function TypingTest({
       const tag = target.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
       if (target.isContentEditable) return true;
+      if (
+        target.closest(
+          "[data-cookie-consent], [data-theme-switcher], [data-typing-options], [data-site-dialog], [role='dialog'], [role='listbox'], [aria-modal='true'], header, footer, form"
+        )
+      ) {
+        return true;
+      }
+      return false;
+    };
+
+    const isTypingInteraction = (target: EventTarget | null) => {
+      if (target === inputRef.current) return true;
+      if (target === restartButtonRef.current) return false;
+      const active = document.activeElement;
+      if (active === inputRef.current) return true;
       return false;
     };
 
     const onWindowKeyDown = (e: KeyboardEvent) => {
-      if (finishedRef.current || statusRef.current === "finished") return;
+      if (e.target === restartButtonRef.current) return;
       if (isOtherEditable(e.target)) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
 
       const key = e.key;
+
+      if (key === "Tab") {
+        if (!isTypingInteraction(e.target)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        tabArmedRef.current = true;
+        if (tabArmedTimerRef.current != null) {
+          window.clearTimeout(tabArmedTimerRef.current);
+        }
+        tabArmedTimerRef.current = window.setTimeout(() => {
+          tabArmedRef.current = false;
+          tabArmedTimerRef.current = null;
+        }, 1600);
+        restartButtonRef.current?.focus({ preventScroll: true });
+        return;
+      }
+
+      if (key === "Escape") {
+        e.preventDefault();
+        tabArmedRef.current = false;
+        if (tabArmedTimerRef.current != null) {
+          window.clearTimeout(tabArmedTimerRef.current);
+          tabArmedTimerRef.current = null;
+        }
+        inputRef.current?.blur();
+        return;
+      }
+
+      if (key === "Enter" && tabArmedRef.current) {
+        e.preventDefault();
+        e.stopPropagation();
+        tabArmedRef.current = false;
+        if (tabArmedTimerRef.current != null) {
+          window.clearTimeout(tabArmedTimerRef.current);
+          tabArmedTimerRef.current = null;
+        }
+        resetTestRef.current();
+        return;
+      }
+
+      if (finishedRef.current || statusRef.current === "finished") return;
+
       if (
-        key === "Tab" ||
-        key === "Escape" ||
         key === "Shift" ||
         key === "Control" ||
         key === "Alt" ||
@@ -865,7 +968,12 @@ export function TypingTest({
     };
 
     window.addEventListener("keydown", onWindowKeyDown, true);
-    return () => window.removeEventListener("keydown", onWindowKeyDown, true);
+    return () => {
+      window.removeEventListener("keydown", onWindowKeyDown, true);
+      if (tabArmedTimerRef.current != null) {
+        window.clearTimeout(tabArmedTimerRef.current);
+      }
+    };
   }, [focusInput, syncCounters]);
 
   // Do not auto-scroll on finish either if user is mid-page; optional soft nearest only
@@ -881,6 +989,46 @@ export function TypingTest({
     }, 80);
     return () => window.clearTimeout(id);
   }, [status, finalStats]);
+
+  // Keep the active word visible and snap the overlay caret before paint
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current;
+    const surface = wordsSurfaceRef.current;
+    const caret = caretRef.current;
+    if (!viewport || !surface) return;
+
+    const currentWord = surface.querySelector(
+      '[data-current="true"]'
+    ) as HTMLElement | null;
+    if (currentWord) {
+      const viewportRect = viewport.getBoundingClientRect();
+      const wordRect = currentWord.getBoundingClientRect();
+      const offset =
+        wordRect.top -
+        viewportRect.top -
+        viewportRect.height / 2 +
+        wordRect.height / 2;
+      if (Math.abs(offset) > 2) {
+        viewport.scrollTop += offset;
+      }
+    }
+
+    if (!caret || status === "finished") return;
+    const target = surface.querySelector(
+      "[data-caret-target='true']"
+    ) as HTMLElement | null;
+    if (!target) {
+      caret.style.opacity = "0";
+      return;
+    }
+    const vr = viewport.getBoundingClientRect();
+    const tr = target.getBoundingClientRect();
+    const x = tr.left - vr.left + viewport.scrollLeft;
+    const y = tr.top - vr.top + viewport.scrollTop + tr.height * 0.08;
+    caret.style.opacity = "1";
+    caret.style.height = `${Math.max(tr.height * 0.88, 14)}px`;
+    caret.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+  }, [currentWordIndex, currentCharIndex, words, input, status]);
 
   const liveElapsed =
     status === "running" && startTime
@@ -912,48 +1060,50 @@ export function TypingTest({
       return (
         <span
           key={wIdx}
+          data-current={isCurrent ? "true" : undefined}
           className={cn(
-            "mr-2.5 mb-2 inline-block",
-            // Correct typed text matches caret blue
-            isPast && typed === word && "text-blue-500 dark:text-blue-400",
+            "mr-[0.55em] mb-0 inline-block",
+            isPast && typed === word && "text-[var(--typed-correct)]",
             isPast &&
               typed !== word &&
-              "text-red-500 underline decoration-red-500/50"
+              "text-[var(--typed-incorrect)] underline decoration-[var(--typed-incorrect)]/50"
           )}
         >
           {word.split("").map((char, cIdx) => {
-            let className = "text-zinc-500 dark:text-zinc-500";
+            let className = "text-[var(--typed-upcoming)]";
+            const isCaretHere =
+              isCurrent &&
+              status !== "finished" &&
+              cIdx === currentCharIndex;
             if (isPast) {
               className =
                 typed?.[cIdx] === char
-                  ? "text-blue-500 dark:text-blue-400"
-                  : "text-red-500";
+                  ? "text-[var(--typed-correct)]"
+                  : "text-[var(--typed-incorrect)]";
             } else if (isCurrent) {
               if (cIdx < currentCharIndex) {
                 className =
                   input[cIdx] === char
-                    ? "text-blue-500 dark:text-blue-400"
-                    : "text-red-400 bg-red-500/20";
+                    ? "text-[var(--typed-correct)]"
+                    : "text-[var(--typed-incorrect)] bg-[color-mix(in_srgb,var(--typed-incorrect)_20%,transparent)]";
               } else if (cIdx === currentCharIndex) {
-                className = "text-zinc-500 dark:text-zinc-400";
+                className = "text-[var(--typed-upcoming)]";
               }
             }
             return (
-              <span key={cIdx} className="relative">
-                {/* Fast narrow line caret before the active character */}
-                {isCurrent &&
-                  status !== "finished" &&
-                  cIdx === currentCharIndex && (
-                    <span className="typing-caret absolute left-0 top-[0.12em]" />
-                  )}
-                <span className={className}>{char}</span>
+              <span
+                key={cIdx}
+                data-caret-target={isCaretHere ? "true" : undefined}
+                className={className}
+              >
+                {char}
               </span>
             );
           })}
           {isCurrent &&
             status !== "finished" &&
             currentCharIndex >= word.length && (
-              <span className="typing-caret ml-0.5 align-middle" />
+              <span data-caret-target="true" className="inline-block w-[0.01em]" />
             )}
         </span>
       );
@@ -979,7 +1129,7 @@ export function TypingTest({
     }
 
     return (
-      <div className="w-full max-w-6xl mx-auto -mt-4 sm:-mt-6">
+      <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col -mt-4 sm:-mt-6">
         <div
           ref={resultsRef}
           id="typing-test-results"
@@ -1044,7 +1194,7 @@ export function TypingTest({
           </div>
 
           <div className="flex flex-wrap justify-center gap-3 mt-8">
-            <Button onClick={resetTest}>
+            <Button ref={restartButtonRef} onClick={resetTest}>
               <RotateCcw className="h-4 w-4" />
               Restart
             </Button>
@@ -1084,57 +1234,60 @@ export function TypingTest({
 
   // ── Active typing UI ──
   return (
-    <div className="w-full max-w-4xl mx-auto">
+    <div className="mx-auto flex w-full max-w-none flex-1 flex-col">
       {showTimerBar && (
-        <div className="flex flex-wrap items-center justify-center gap-2 mb-8">
+        <div className="mb-6 flex flex-wrap items-center justify-center gap-1 font-mono">
           {([15, 30, 60, 120] as const).map((t) => (
-            <Button
+            <button
               key={t}
-              variant={timerOption === t ? "default" : "ghost"}
-              size="sm"
+              type="button"
               onClick={() => {
                 setTimerOption(t);
                 setTimeLeft(t);
                 if (status === "idle") resetTest();
               }}
               disabled={status === "running"}
+              className={cn(
+                "rounded-md px-2 py-1 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60 disabled:opacity-50",
+                timerOption === t
+                  ? "text-blue-500"
+                  : "text-zinc-500 hover:text-zinc-300"
+              )}
             >
-              {t}s
-            </Button>
+              {t}
+            </button>
           ))}
         </div>
       )}
 
-      <div className="flex flex-wrap items-center justify-center gap-6 mb-6 text-sm font-mono">
+      <div className="mb-5 flex flex-wrap items-center justify-center gap-6 font-mono text-sm">
         <div className="flex flex-col items-center">
-          <span className="text-zinc-500 text-xs uppercase tracking-wider">
+          <span className="text-[10px] font-medium uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
             WPM
           </span>
-          <span className="text-2xl font-bold text-blue-500">{currentWpm}</span>
+          <span className="text-2xl font-medium text-[var(--stat-wpm)]">{currentWpm}</span>
         </div>
         <div className="flex flex-col items-center">
-          <span className="text-zinc-500 text-xs uppercase tracking-wider">
+          <span className="text-[10px] font-medium uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
             Accuracy
           </span>
-          <span className="text-2xl font-bold text-emerald-500">
+          <span className="text-2xl font-medium text-[var(--stat-accuracy)]">
             {currentAccuracy}%
           </span>
         </div>
         <div className="flex flex-col items-center">
-          <span className="text-zinc-500 text-xs uppercase tracking-wider">
+          <span className="text-[10px] font-medium uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
             {timeLabel}
           </span>
-          <span className="text-2xl font-bold text-amber-500">{timeValue}</span>
+          <span className="text-2xl font-medium text-[var(--stat-time)]">{timeValue}</span>
         </div>
         {status === "running" && (
-          <>
-            <div className="flex flex-col items-center">
-              <span className="text-zinc-500 text-xs uppercase tracking-wider">
-                Wrong Words
-              </span>
-              <span className="text-2xl font-bold text-red-500">{wrongWords}</span>
-            </div>
-          </>
+          <div className="flex flex-col items-center">
+            <span className="text-[10px] font-medium uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
+              Wrong Words
+            </span>
+            <span className="text-2xl font-medium text-red-500">{wrongWords}</span>
+          </div>
         )}
       </div>
 
@@ -1148,69 +1301,78 @@ export function TypingTest({
           }
         }}
         className={cn(
-          "relative cursor-text py-2 sm:py-4",
+          "relative mx-auto w-full cursor-text py-1 sm:py-2",
           status === "idle" && "opacity-95"
         )}
       >
-        <div
-          ref={wordsSurfaceRef}
-          className="relative w-full select-none leading-[1.85] tracking-wide"
-          style={{
-            fontSize: `${fontSize}px`,
-            fontFamily: `"${fontFamily}", ui-monospace, monospace`,
-          }}
-        >
-          {renderWords()}
-
-          <input
-            ref={inputRef}
-            type="text"
-            value={input}
-            onChange={handleInput}
-            onKeyDown={handleKeyDown}
-            className="absolute left-0 top-0 z-10 caret-transparent"
+        <div ref={viewportRef} className="typing-viewport">
+          {status !== "finished" && (
+            <span
+              ref={caretRef}
+              className={cn("typing-caret", status === "idle" && "is-idle")}
+              aria-hidden="true"
+            />
+          )}
+          <div
+            ref={wordsSurfaceRef}
+            className="typing-text relative w-full select-none"
             style={{
-              opacity: 0,
-              width: 1,
-              height: 1,
-              padding: 0,
-              margin: 0,
-              border: 0,
-              overflow: "hidden",
+              fontFamily: `"${fontFamily}", var(--font-jetbrains-mono), "Roboto Mono", "IBM Plex Mono", "Source Code Pro", ui-monospace, monospace`,
             }}
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="off"
-            spellCheck={false}
-            inputMode="text"
-            enterKeyHint="done"
-            aria-label="Typing test input"
-            tabIndex={0}
-          />
-        </div>
+          >
+            {renderWords()}
 
-        {status === "idle" && (
-          <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
-            <div className="flex flex-col items-center gap-3 px-4">
-              <div className="flex items-center gap-2 rounded-xl border border-zinc-200/80 bg-white/90 px-4 py-2.5 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-zinc-950/85">
-                <kbd className="inline-flex h-7 min-w-[1.75rem] items-center justify-center rounded-md border border-zinc-200 bg-zinc-50 px-1.5 font-mono text-[11px] font-medium text-zinc-600 shadow-[0_1px_0_0_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-300">
-                  A–Z
-                </kbd>
-                <span className="text-sm font-medium tracking-tight text-zinc-600 dark:text-zinc-300">
-                  Press any key to start
-                </span>
-              </div>
-              <span className="h-1 w-1 animate-pulse rounded-full bg-blue-500/70" />
-            </div>
+            <input
+              ref={inputRef}
+              type="text"
+              value={input}
+              onChange={handleInput}
+              onKeyDown={handleKeyDown}
+              className="absolute left-0 top-0 z-10 caret-transparent"
+              style={{
+                opacity: 0,
+                width: 1,
+                height: 1,
+                padding: 0,
+                margin: 0,
+                border: 0,
+                overflow: "hidden",
+              }}
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              inputMode="text"
+              enterKeyHint="done"
+              aria-label="Typing test input"
+              tabIndex={0}
+            />
           </div>
-        )}
+        </div>
       </div>
 
-      <div className="mt-4 flex justify-center gap-3 pb-2">
-        <Button variant="outline" size="sm" onClick={resetTest}>
-          <RotateCcw className="h-4 w-4" />
-          Restart
-        </Button>
+      <div className="mt-auto flex flex-col items-center gap-2.5 pt-8 pb-2">
+        <button
+          ref={restartButtonRef}
+          type="button"
+          onClick={resetTest}
+          aria-label="Restart typing test"
+          className="flex h-10 w-10 items-center justify-center rounded-full text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)] hover:text-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] focus-visible:text-[var(--primary)]"
+        >
+          <RotateCcw className="h-[1.15rem] w-[1.15rem]" aria-hidden="true" />
+        </button>
+        <div className="flex flex-col items-center gap-1.5 font-mono text-[11px] text-[var(--muted-foreground)]">
+          <p className="flex flex-wrap items-center justify-center gap-1">
+            <kbd className="shortcut-key">tab</kbd>
+            <span>+</span>
+            <kbd className="shortcut-key">enter</kbd>
+            <span className="ml-0.5">— restart test</span>
+          </p>
+          <p className="flex flex-wrap items-center justify-center gap-1">
+            <kbd className="shortcut-key">esc</kbd>
+            <span className="ml-0.5">— cancel / reset focus</span>
+          </p>
+        </div>
       </div>
     </div>
   );

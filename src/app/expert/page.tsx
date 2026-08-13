@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { TypingTest } from "@/components/typing/TypingTest";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import type { ExpertDifficulty } from "@/lib/words";
 
 const WORD_PRESETS = [25, 50, 75, 100] as const;
 const TIME_PRESETS = [30, 60, 90, 120] as const;
@@ -29,6 +30,8 @@ export default function ExpertPage() {
 
   const [punctuation, setPunctuation] = useState(true);
   const [numbers, setNumbers] = useState(true);
+  const [expertDifficulty, setExpertDifficulty] =
+    useState<ExpertDifficulty>("normal");
   const [testStatus, setTestStatus] = useState<"idle" | "running" | "finished">(
     "idle"
   );
@@ -54,6 +57,7 @@ export default function ExpertPage() {
     limitMode === "words" ? `w${wordCount}` : `t${timerSeconds}`,
     punctuation ? "p" : "",
     numbers ? "n" : "",
+    expertDifficulty,
   ].join("-");
 
   const blur = (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -73,9 +77,19 @@ export default function ExpertPage() {
   };
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10">
+    <div className="mx-auto flex max-w-7xl flex-1 flex-col px-4 py-8 sm:px-6 sm:py-10">
       {showOptions && (
-      <div className="mb-8 flex flex-wrap items-center justify-center gap-x-1 gap-y-2">
+      <div className="mb-8 flex flex-col items-center gap-2" data-typing-options="">
+      <div className="flex flex-wrap items-center justify-center gap-x-1 gap-y-2">
+        <button
+          type="button"
+          aria-pressed="true"
+          title="Expert word set"
+          className="rounded-md px-2 py-1 text-[13px] font-medium text-[var(--primary)]"
+        >
+          Expert
+        </button>
+        <span className="mx-1 hidden h-3.5 w-px bg-[var(--border)] sm:block" aria-hidden="true" />
         <div className="flex items-center rounded-lg border border-zinc-200 bg-zinc-50 p-0.5 dark:border-white/10 dark:bg-zinc-900/80">
           <button
             type="button"
@@ -255,6 +269,34 @@ export default function ExpertPage() {
           numbers
         </Button>
       </div>
+      <div className="flex flex-wrap items-center justify-center gap-x-1 gap-y-1 font-mono text-[13px]">
+        {(["normal", "hard", "extreme"] as const).map((level, index) => (
+          <span key={level} className="inline-flex items-center gap-1">
+            {index > 0 && (
+              <span className="px-0.5 text-[var(--muted-foreground)]/50" aria-hidden="true">
+                •
+              </span>
+            )}
+            <button
+              type="button"
+              aria-pressed={expertDifficulty === level}
+              onClick={(e) => {
+                setExpertDifficulty(level);
+                blur(e);
+              }}
+              className={cn(
+                "rounded-md px-2 py-1 text-[13px] font-medium",
+                expertDifficulty === level
+                  ? "text-[var(--primary)]"
+                  : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+              )}
+            >
+              {level[0]!.toUpperCase() + level.slice(1)}
+            </button>
+          </span>
+        ))}
+      </div>
+      </div>
       )}
 
       <TypingTest
@@ -265,6 +307,7 @@ export default function ExpertPage() {
         initialTimer={timerSeconds}
         punctuation={punctuation}
         numbers={numbers}
+        expertLevel={expertDifficulty}
         showTimerControls={false}
         onStatusChange={setTestStatus}
       />

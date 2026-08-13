@@ -6,13 +6,8 @@ import {
   Home,
   BookOpen,
   Keyboard,
-  Zap,
-  LayoutDashboard,
   Trophy,
-  User,
   Settings,
-  Moon,
-  Sun,
   Menu,
   X,
 } from "lucide-react";
@@ -21,14 +16,14 @@ import { applyThemeClass, useSettingsStore } from "@/store/useSettingsStore";
 import { useUserStore } from "@/store/useUserStore";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
+import { BulletTypeLogo } from "@/components/layout/BulletTypeLogo";
+import { ThemeSwitcher } from "@/components/layout/ThemeSwitcher";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/", label: "Home", icon: Home, id: "home" },
   { href: "/learn", label: "Learn", icon: BookOpen, id: "learn" },
   { href: "/practice", label: "Typing Practice", icon: Keyboard, id: "practice" },
-  { href: "/expert", label: "Expert", icon: Zap, id: "expert" },
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, id: "dashboard" },
   { href: "/leaderboard", label: "Leaderboard", icon: Trophy, id: "leaderboard" },
 ] as const;
 
@@ -99,14 +94,10 @@ export function Navbar() {
     void (async () => {
       const { recordSiteVisit } = await import("@/lib/visits");
       const { startPresenceTracking } = await import("@/lib/presence");
-      const { requestUserLocation } = await import("@/lib/location");
       const {
         data: { session },
       } = await supabase.auth.getSession();
       const uid = session?.user?.id ?? user?.id ?? null;
-
-      // Optional location (browser asks once; denied users stay private)
-      await requestUserLocation();
 
       await recordSiteVisit(uid);
       stopPresence = startPresenceTracking(uid);
@@ -175,19 +166,10 @@ export function Navbar() {
     })();
   }, [isAdminRoute, pathname]);
 
-  const toggleTheme = () => {
-    // Cycle: dark → light → dark (dark is product default)
-    const next = theme === "dark" ? "light" : "dark";
-    setTheme(next);
-    applyThemeClass(next);
-  };
-
   useEffect(() => {
     if (!mounted) return;
-    // If old "system" is still in memory, normalize to dark
     if (theme === "system") {
-      setTheme("dark");
-      applyThemeClass("dark");
+      setTheme("forest");
       return;
     }
     applyThemeClass(theme);
@@ -196,32 +178,39 @@ export function Navbar() {
   }, [theme, mounted]);
 
   return (
-    <header className="sticky top-0 z-50 w-full bg-white/70 dark:bg-zinc-950/70 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
-        <div className="flex items-center gap-8">
-          <Link href="/" className="flex items-center gap-2 font-bold text-xl tracking-tight">
-            <span className="bg-gradient-to-r from-blue-500 to-cyan-400 bg-clip-text text-transparent">
-              BulletType
-            </span>
+    <header className="sticky top-0 z-50 w-full bg-[var(--background)]">
+      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6">
+        <div className="flex items-center gap-6">
+          <Link
+            href="/"
+            className="flex items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+            aria-label="BulletType home"
+          >
+            <BulletTypeLogo />
           </Link>
 
-          <nav className="hidden md:flex items-center gap-1">
+          <nav className="hidden md:flex items-center gap-1" aria-label="Main">
             {navItems.map((item) => {
               const Icon = item.icon;
-              const active = pathname === item.href;
+              const active =
+                item.href === "/"
+                  ? pathname === "/"
+                  : pathname === item.href || pathname.startsWith(`${item.href}/`);
               return (
                 <Link
                   key={item.id}
                   href={item.href}
+                  title={item.label}
+                  aria-label={item.label}
+                  aria-current={active ? "page" : undefined}
                   className={cn(
-                    "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                    "flex items-center justify-center rounded-lg p-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]",
                     active
-                      ? "bg-blue-500/10 text-blue-600 dark:text-blue-400"
-                      : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                      ? "bg-[color-mix(in_srgb,var(--primary)_14%,transparent)] text-[var(--primary)]"
+                      : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
                   )}
                 >
                   <Icon className="h-4 w-4" />
-                  {item.label}
                 </Link>
               );
             })}
@@ -229,18 +218,7 @@ export function Navbar() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleTheme}
-            aria-label="Toggle theme"
-          >
-            {mounted && theme === "dark" ? (
-              <Sun className="h-5 w-5" />
-            ) : (
-              <Moon className="h-5 w-5" />
-            )}
-          </Button>
+          <ThemeSwitcher />
 
           {isAuthenticated && user ? (
             <Link href="/profile">
@@ -285,35 +263,41 @@ export function Navbar() {
 
       {/* Mobile menu */}
       {mobileOpen && (
-        <div className="md:hidden border-t border-white/10 bg-white/90 dark:bg-zinc-950/90 backdrop-blur-xl">
-          <nav className="flex flex-col p-4 gap-1">
+        <div className="md:hidden bg-[var(--background)]">
+          <nav className="flex flex-wrap items-center gap-1 p-3" aria-label="Mobile">
             {navItems.map((item) => {
               const Icon = item.icon;
-              const active = pathname === item.href;
+              const active =
+                item.href === "/"
+                  ? pathname === "/"
+                  : pathname === item.href || pathname.startsWith(`${item.href}/`);
               return (
                 <Link
                   key={item.id}
                   href={item.href}
+                  title={item.label}
+                  aria-label={item.label}
+                  aria-current={active ? "page" : undefined}
                   onClick={() => setMobileOpen(false)}
                   className={cn(
-                    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium",
+                    "flex items-center justify-center rounded-lg p-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]",
                     active
-                      ? "bg-blue-500/10 text-blue-600 dark:text-blue-400"
-                      : "text-zinc-600 dark:text-zinc-400"
+                      ? "bg-[color-mix(in_srgb,var(--primary)_14%,transparent)] text-[var(--primary)]"
+                      : "text-[var(--muted-foreground)]"
                   )}
                 >
                   <Icon className="h-4 w-4" />
-                  {item.label}
                 </Link>
               );
             })}
             <Link
               href="/settings"
+              title="Settings"
+              aria-label="Settings"
               onClick={() => setMobileOpen(false)}
-              className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-zinc-600 dark:text-zinc-400"
+              className="flex items-center justify-center rounded-lg p-2.5 text-[var(--muted-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
             >
               <Settings className="h-4 w-4" />
-              Settings
             </Link>
           </nav>
         </div>

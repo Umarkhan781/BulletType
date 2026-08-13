@@ -1,4 +1,15 @@
-export type Theme = "light" | "dark" | "system";
+export type Theme =
+  | "dark"
+  | "light"
+  | "ocean"
+  | "forest"
+  | "sunset"
+  | "lavender"
+  | "midnight"
+  | "rose"
+  | "emerald"
+  | "mono"
+  | "system";
 
 export type Difficulty = "beginner" | "intermediate" | "expert";
 

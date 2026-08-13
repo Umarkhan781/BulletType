@@ -13,16 +13,28 @@ export default function SettingsPage() {
         {/* Theme */}
         <section className="glass rounded-2xl p-6">
           <h2 className="font-semibold mb-4">Appearance</h2>
-          <div className="flex gap-2">
-            {(["light", "dark", "system"] as const).map((t) => (
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                ["dark", "Dark"],
+                ["light", "Light"],
+                ["ocean", "Ocean"],
+                ["forest", "Forest"],
+                ["sunset", "Sunset"],
+                ["lavender", "Lavender"],
+                ["midnight", "Midnight Blue"],
+                ["rose", "Rose"],
+                ["emerald", "Emerald"],
+                ["mono", "Mono"],
+              ] as const
+            ).map(([id, label]) => (
               <Button
-                key={t}
-                variant={s.theme === t ? "default" : "outline"}
+                key={id}
+                variant={s.theme === id ? "default" : "outline"}
                 size="sm"
-                onClick={() => s.setTheme(t)}
-                className="capitalize"
+                onClick={() => s.setTheme(id)}
               >
-                {t}
+                {label}
               </Button>
             ))}
           </div>

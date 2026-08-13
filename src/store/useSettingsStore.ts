@@ -1,6 +1,13 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { createJSONStorage, persist } from "zustand/middleware";
 import type { Settings, Theme } from "@/types";
+import { hasCookieConsent } from "@/lib/cookies";
+import {
+  applyAppearance,
+  resolveStoredTheme,
+  saveThemePreference,
+  type AppearanceTheme,
+} from "@/lib/themes";
 
 interface SettingsState extends Settings {
   setTheme: (theme: Theme) => void;
@@ -19,7 +26,7 @@ interface SettingsState extends Settings {
 }
 
 const defaultSettings: Settings = {
-  theme: "dark",
+  theme: "forest",
   fontSize: 24,
   fontFamily: "JetBrains Mono",
   cursorStyle: "block",
@@ -41,7 +48,12 @@ export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
       ...defaultSettings,
-      setTheme: (theme) => set({ theme }),
+      setTheme: (theme) => {
+        const next = resolveStoredTheme(theme);
+        set({ theme: next });
+        applyAppearance(next);
+        saveThemePreference(next);
+      },
       setFontSize: (fontSize) => set({ fontSize }),
       setFontFamily: (fontFamily) => set({ fontFamily }),
       setCursorStyle: (cursorStyle) => set({ cursorStyle }),
@@ -60,40 +72,75 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: "typing-master-settings",
-      // v1: product default is dark (was system → followed OS light on many PCs)
-      version: 1,
+      version: 2,
       migrate: (persisted, fromVersion) => {
         const state = (persisted ?? {}) as Partial<SettingsState>;
-        if (fromVersion < 1) {
+        const theme = resolveStoredTheme(state.theme, "forest");
+        if (fromVersion < 2) {
           return {
             ...state,
-            theme: "dark",
+            theme,
           } as SettingsState;
         }
         return {
           ...state,
-          theme: state.theme === "light" ? "light" : state.theme || "dark",
+          theme,
         } as SettingsState;
       },
+      onRehydrateStorage: () => (state) => {
+        if (!state) return;
+        const theme = resolveStoredTheme(state.theme);
+        state.theme = theme;
+        if (typeof document !== "undefined" && hasCookieConsent()) {
+          applyAppearance(theme);
+          saveThemePreference(theme);
+        }
+      },
+      storage: createJSONStorage(() => ({
+        getItem: (name) => {
+          if (typeof localStorage === "undefined") return null;
+          const raw = localStorage.getItem(name);
+          if (!raw || hasCookieConsent()) return raw;
+          try {
+            const parsed = JSON.parse(raw) as {
+              state?: Partial<SettingsState>;
+              version?: number;
+            };
+            if (parsed.state) delete parsed.state.theme;
+            return JSON.stringify(parsed);
+          } catch {
+            return raw;
+          }
+        },
+        setItem: (name, value) => {
+          if (typeof localStorage === "undefined") return;
+          try {
+            const parsed = JSON.parse(value) as {
+              state?: Partial<SettingsState>;
+              version?: number;
+            };
+            if (!hasCookieConsent() && parsed.state) {
+              delete parsed.state.theme;
+            }
+            localStorage.setItem(name, JSON.stringify(parsed));
+          } catch {
+            localStorage.setItem(name, value);
+          }
+        },
+        removeItem: (name) => {
+          if (typeof localStorage === "undefined") return;
+          localStorage.removeItem(name);
+        },
+      })),
     }
   )
 );
 
-/** Apply theme class on <html> (dark is default) */
+/** Apply theme class + CSS variables on <html> (forest is default) */
 export function applyThemeClass(theme: Theme) {
-  if (typeof document === "undefined") return;
-  const root = document.documentElement;
-  const preferDark =
-    theme === "dark" ||
-    (theme === "system" &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches);
-  // Default product behavior: treat unknown as dark
-  if (theme === "light") {
-    root.classList.remove("dark");
-  } else if (theme === "system") {
-    if (preferDark) root.classList.add("dark");
-    else root.classList.remove("dark");
-  } else {
-    root.classList.add("dark");
-  }
+  applyAppearance(resolveStoredTheme(theme));
+}
+
+export function currentAppearance(theme: Theme): AppearanceTheme {
+  return resolveStoredTheme(theme);
 }

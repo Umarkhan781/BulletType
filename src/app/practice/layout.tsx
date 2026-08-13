@@ -18,5 +18,9 @@ export default function PracticeLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return children;
+  return (
+    <div className="flex min-h-0 flex-1 flex-col overflow-x-hidden bg-[var(--background)] text-[var(--foreground)]">
+      {children}
+    </div>
+  );
 }
