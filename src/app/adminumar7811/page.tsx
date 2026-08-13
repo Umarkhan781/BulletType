@@ -78,38 +78,33 @@ async function fetchVisitRowsSince(sinceISO: string): Promise<{
   totalCount: number;
   error?: string;
 }> {
-  // Prefer visited_at; fall back to created_at if needed
-  let query = await supabase
-    .from("user_visits")
-    .select("user_id, visitor_id, host")
-    .gte("visited_at", sinceISO)
-    .limit(10000);
-
-  if (query.error) {
-    query = await supabase
+  const loadVisits = async (column: "visited_at" | "created_at", withHost: boolean) =>
+    supabase
       .from("user_visits")
-      .select("user_id, visitor_id, host")
-      .gte("created_at", sinceISO)
+      .select(withHost ? "user_id, visitor_id, host" : "user_id, visitor_id")
+      .gte(column, sinceISO)
       .limit(10000);
+
+  let result = await loadVisits("visited_at", true);
+  if (result.error && /host/i.test(result.error.message || "")) {
+    result = await loadVisits("visited_at", false);
+  }
+  if (result.error) {
+    result = await loadVisits("created_at", true);
+    if (result.error && /host/i.test(result.error.message || "")) {
+      result = await loadVisits("created_at", false);
+    }
   }
 
-  if (query.error && /host/i.test(query.error.message)) {
-    query = await supabase
-      .from("user_visits")
-      .select("user_id, visitor_id")
-      .gte("visited_at", sinceISO)
-      .limit(10000);
-  }
-
-  if (query.error) {
+  if (result.error) {
     return {
       rows: [],
       totalCount: 0,
-      error: query.error.message || "user_visits unavailable",
+      error: result.error.message || "user_visits unavailable",
     };
   }
 
-  const rawRows = (query.data || []) as VisitRow[];
+  const rawRows = (result.data || []) as VisitRow[];
   const rows = rawRows.filter((row) => !isLocalAnalyticsRow(row));
   const droppedLocal = rawRows.length - rows.length;
 
