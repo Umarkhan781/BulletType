@@ -10,12 +10,91 @@ export const THEME_COOKIE_KEY = "bt-theme";
 export const COOKIE_CONSENT_EVENT = "bt-cookie-consent";
 export const COOKIE_POPUP_EVENT = "bt-open-cookie-popup";
 
+export type CookieConsentValue = "allow" | "deny";
+
+type ConsentSnapshot = {
+  decision: CookieConsentValue | null;
+  popupOpen: boolean;
+};
+
+const consentListeners = new Set<() => void>();
+let consentDecision: CookieConsentValue | null = null;
+let consentPopupOpen = false;
+let consentHydrated = false;
+let consentDismissedThisVisit = false;
+let consentCache: ConsentSnapshot = { decision: null, popupOpen: false };
+
+function emitConsent() {
+  consentListeners.forEach((listener) => listener());
+}
+
+function readPersistedConsent(): CookieConsentValue | null {
+  const fromCookie = parseCookieConsent(getCookie(COOKIE_CONSENT_KEY));
+  if (fromCookie) return fromCookie;
+  if (typeof window === "undefined") return null;
+  try {
+    return parseCookieConsent(sessionStorage.getItem(COOKIE_CONSENT_KEY));
+  } catch {
+    return null;
+  }
+}
+
+function hydrateConsent() {
+  if (consentHydrated || typeof window === "undefined") return;
+  consentDecision = readPersistedConsent();
+  consentPopupOpen = consentDecision === null && !consentDismissedThisVisit;
+  consentHydrated = true;
+}
+
+function persistConsent(value: CookieConsentValue) {
+  try {
+    sessionStorage.setItem(COOKIE_CONSENT_KEY, value);
+  } catch {
+    // private mode may block sessionStorage
+  }
+  setCookie(COOKIE_CONSENT_KEY, value, CONSENT_MAX_AGE);
+}
+
+export function subscribeConsentStore(onStoreChange: () => void) {
+  consentListeners.add(onStoreChange);
+  return () => consentListeners.delete(onStoreChange);
+}
+
+export function getConsentSnapshot(): ConsentSnapshot {
+  hydrateConsent();
+  if (
+    consentCache.decision === consentDecision &&
+    consentCache.popupOpen === consentPopupOpen
+  ) {
+    return consentCache;
+  }
+  consentCache = { decision: consentDecision, popupOpen: consentPopupOpen };
+  return consentCache;
+}
+
+const SERVER_CONSENT_SNAPSHOT: ConsentSnapshot = {
+  decision: null,
+  popupOpen: false,
+};
+
+export function getServerConsentSnapshot(): ConsentSnapshot {
+  return SERVER_CONSENT_SNAPSHOT;
+}
+
 export function openCookiePopup() {
   if (typeof window === "undefined") return;
+  hydrateConsent();
+  consentPopupOpen = true;
+  emitConsent();
   window.dispatchEvent(new Event(COOKIE_POPUP_EVENT));
 }
 
-export type CookieConsentValue = "allow" | "deny";
+export function closeCookiePopup() {
+  hydrateConsent();
+  consentPopupOpen = false;
+  consentDismissedThisVisit = true;
+  emitConsent();
+}
 
 export type PracticeMode = "time" | "words" | "custom" | "quote";
 
@@ -35,6 +114,21 @@ export type PracticeTypingPrefs = {
   customSeconds: number;
   customWords: number;
   customKind: "time" | "words";
+};
+
+/** New-user / Reset Settings defaults for Typing Practice. */
+export const DEFAULT_PRACTICE_PREFS: PracticeTypingPrefs = {
+  mode: "words",
+  timeValue: 15,
+  wordCount: 30,
+  wordsDifficulty: "regular",
+  punctuation: false,
+  numbers: false,
+  expert: false,
+  expertDifficulty: "normal",
+  customSeconds: 45,
+  customWords: 25,
+  customKind: "time",
 };
 
 const CONSENT_MAX_AGE = 60 * 60 * 24 * 365; // 1 year
@@ -136,14 +230,11 @@ export function parseTypingPrefs(
 }
 
 export function getCookieConsent(): CookieConsentValue | null {
-  const fromCookie = parseCookieConsent(getCookie(COOKIE_CONSENT_KEY));
-  if (fromCookie) return fromCookie;
-  if (typeof window === "undefined") return null;
-  try {
-    return parseCookieConsent(sessionStorage.getItem(COOKIE_CONSENT_KEY));
-  } catch {
-    return null;
+  if (typeof window !== "undefined") {
+    hydrateConsent();
+    if (consentDecision) return consentDecision;
   }
+  return readPersistedConsent();
 }
 
 export function hasCookieConsent(): boolean {
@@ -151,16 +242,16 @@ export function hasCookieConsent(): boolean {
 }
 
 export function setCookieConsent(value: CookieConsentValue) {
-  try {
-    sessionStorage.setItem(COOKIE_CONSENT_KEY, value);
-  } catch {
-    // private mode may block sessionStorage
-  }
-  setCookie(COOKIE_CONSENT_KEY, value, CONSENT_MAX_AGE);
+  hydrateConsent();
+  consentDecision = value;
+  consentPopupOpen = false;
+  consentDismissedThisVisit = true;
+  persistConsent(value);
   if (value === "deny") {
     deleteCookie(TYPING_PREFS_KEY);
     deleteCookie(THEME_COOKIE_KEY);
   }
+  emitConsent();
   if (typeof window !== "undefined") {
     window.dispatchEvent(
       new CustomEvent(COOKIE_CONSENT_EVENT, { detail: value })

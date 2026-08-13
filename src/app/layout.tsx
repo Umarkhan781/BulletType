@@ -75,16 +75,16 @@ export const metadata: Metadata = {
     },
   },
   icons: {
-    // ?v=bt3 busts cache of the previous blue BT mark
+    // ?v=bt5 busts cache of the previous blue BT mark
     icon: [
-      { url: "/favicon.svg?v=bt3", type: "image/svg+xml" },
-      { url: "/favicon-32.png?v=bt3", sizes: "32x32", type: "image/png" },
-      { url: "/icon-192.png?v=bt3", sizes: "192x192", type: "image/png" },
-      { url: "/icon-512.png?v=bt3", sizes: "512x512", type: "image/png" },
-      { url: "/favicon.ico?v=bt3", sizes: "any" },
+      { url: "/favicon.svg?v=bt5", type: "image/svg+xml" },
+      { url: "/favicon-32.png?v=bt5", sizes: "32x32", type: "image/png" },
+      { url: "/icon-192.png?v=bt5", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png?v=bt5", sizes: "512x512", type: "image/png" },
+      { url: "/favicon.ico?v=bt5", sizes: "any" },
     ],
-    apple: [{ url: "/apple-icon.png?v=bt3", sizes: "180x180", type: "image/png" }],
-    shortcut: "/favicon.svg?v=bt3",
+    apple: [{ url: "/apple-icon.png?v=bt5", sizes: "180x180", type: "image/png" }],
+    shortcut: "/favicon.svg?v=bt5",
   },
 };
 

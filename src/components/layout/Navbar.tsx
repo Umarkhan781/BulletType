@@ -18,6 +18,7 @@ import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { BulletTypeLogo } from "@/components/layout/BulletTypeLogo";
 import { ThemeSwitcher } from "@/components/layout/ThemeSwitcher";
+import { NavHoverGroup, NavHoverItem } from "@/components/layout/NavHoverGroup";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -178,7 +179,7 @@ export function Navbar() {
   }, [theme, mounted]);
 
   return (
-    <header className="sticky top-0 z-50 w-full bg-[var(--background)]">
+    <header className="sticky top-0 z-50 w-full overflow-visible bg-[var(--background)]">
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6">
         <div className="flex items-center gap-6">
           <Link
@@ -189,65 +190,74 @@ export function Navbar() {
             <BulletTypeLogo />
           </Link>
 
-          <nav className="hidden md:flex items-center gap-1" aria-label="Main">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const active =
-                item.href === "/"
-                  ? pathname === "/"
-                  : pathname === item.href || pathname.startsWith(`${item.href}/`);
-              return (
-                <Link
-                  key={item.id}
-                  href={item.href}
-                  title={item.label}
-                  aria-label={item.label}
-                  aria-current={active ? "page" : undefined}
-                  className={cn(
-                    "flex items-center justify-center rounded-lg p-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]",
-                    active
-                      ? "bg-[color-mix(in_srgb,var(--primary)_14%,transparent)] text-[var(--primary)]"
-                      : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
-                  )}
-                >
-                  <Icon className="h-4 w-4" />
-                </Link>
-              );
-            })}
-          </nav>
+          <NavHoverGroup className="hidden items-center gap-1 md:flex" >
+            <nav className="flex items-center gap-1" aria-label="Main">
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                const active =
+                  item.href === "/"
+                    ? pathname === "/"
+                    : pathname === item.href ||
+                      pathname.startsWith(`${item.href}/`);
+                return (
+                  <NavHoverItem key={item.id} id={item.id} label={item.label}>
+                    <Link
+                      href={item.href}
+                      aria-label={item.label}
+                      aria-current={active ? "page" : undefined}
+                      className={cn(
+                        "flex items-center justify-center rounded-xl p-2 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]",
+                        active
+                          ? "bg-[color-mix(in_srgb,var(--primary)_12%,transparent)] text-[var(--primary)]"
+                          : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                      )}
+                    >
+                      <Icon className="h-4 w-4" />
+                    </Link>
+                  </NavHoverItem>
+                );
+              })}
+            </nav>
+          </NavHoverGroup>
         </div>
 
-        <div className="flex items-center gap-2">
-          <ThemeSwitcher />
+        <NavHoverGroup className="flex items-center gap-1">
+          <NavHoverItem id="appearance" label="Appearance">
+            <ThemeSwitcher />
+          </NavHoverItem>
 
           {isAuthenticated && user ? (
-            <Link href="/profile">
-              <Button variant="ghost" size="sm" className="gap-2">
-                <img
-                  src={user.avatar}
-                  alt={user.username}
-                  className="h-7 w-7 rounded-full object-cover border border-white/20"
-                />
-                <span className="hidden sm:inline font-medium">
-                  {user.username}
-                </span>
-              </Button>
-            </Link>
+            <NavHoverItem id="profile" label="Profile">
+              <Link href="/profile" aria-label="Profile">
+                <Button variant="ghost" size="sm" className="gap-2 hover:bg-transparent">
+                  <img
+                    src={user.avatar}
+                    alt={user.username}
+                    className="h-7 w-7 rounded-full object-cover border border-white/20"
+                  />
+                  <span className="hidden sm:inline font-medium">
+                    {user.username}
+                  </span>
+                </Button>
+              </Link>
+            </NavHoverItem>
           ) : (
-            <Link href="/login" title="Guest — sign up to keep your name forever">
-              <Button variant="ghost" size="sm" className="gap-2 max-w-[11rem]">
-                <img
-                  src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(
-                    guestUsername || "guest"
-                  )}`}
-                  alt={guestUsername || "Guest"}
-                  className="h-7 w-7 rounded-full object-cover border border-white/20 shrink-0"
-                />
-                <span className="hidden sm:inline font-medium truncate text-left">
-                  {guestUsername ? `@${guestUsername}` : "Guest"}
-                </span>
-              </Button>
-            </Link>
+            <NavHoverItem id="profile" label="Profile">
+              <Link href="/login" aria-label="Profile">
+                <Button variant="ghost" size="sm" className="max-w-[11rem] gap-2 hover:bg-transparent">
+                  <img
+                    src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(
+                      guestUsername || "guest"
+                    )}`}
+                    alt={guestUsername || "Guest"}
+                    className="h-7 w-7 shrink-0 rounded-full object-cover border border-white/20"
+                  />
+                  <span className="hidden truncate text-left sm:inline font-medium">
+                    {guestUsername ? `@${guestUsername}` : "Guest"}
+                  </span>
+                </Button>
+              </Link>
+            </NavHoverItem>
           )}
 
           <Button
@@ -255,10 +265,11 @@ export function Navbar() {
             size="icon"
             className="md:hidden"
             onClick={() => setMobileOpen(!mobileOpen)}
+            aria-label={mobileOpen ? "Close menu" : "Open menu"}
           >
             {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </Button>
-        </div>
+        </NavHoverGroup>
       </div>
 
       {/* Mobile menu */}
@@ -275,7 +286,6 @@ export function Navbar() {
                 <Link
                   key={item.id}
                   href={item.href}
-                  title={item.label}
                   aria-label={item.label}
                   aria-current={active ? "page" : undefined}
                   onClick={() => setMobileOpen(false)}
@@ -292,7 +302,6 @@ export function Navbar() {
             })}
             <Link
               href="/settings"
-              title="Settings"
               aria-label="Settings"
               onClick={() => setMobileOpen(false)}
               className="flex items-center justify-center rounded-lg p-2.5 text-[var(--muted-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"

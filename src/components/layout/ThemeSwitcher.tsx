@@ -54,12 +54,11 @@ export function ThemeSwitcher() {
     <div ref={rootRef} className="relative" data-theme-switcher="">
       <button
         type="button"
-        aria-label="Appearance themes"
+        aria-label="Appearance"
         aria-haspopup="listbox"
         aria-expanded={open}
-        title="Appearance"
         onClick={() => setOpen((value) => !value)}
-        className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+        className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
       >
         <Palette className="h-5 w-5" aria-hidden="true" />
       </button>

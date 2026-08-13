@@ -410,3 +410,7 @@ body {
   animation: bt-dialog-in 180ms ease-out;
   will-change: transform, opacity;
 }
+
+.learn-shell {
+  min-height: 100%;
+}
