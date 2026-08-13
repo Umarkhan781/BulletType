@@ -26,6 +26,51 @@ import { useSettingsStore } from "@/store/useSettingsStore";
 import { useUserStore } from "@/store/useUserStore";
 import type { Difficulty, TimerOption, TypingStats, TestResult } from "@/types";
 
+function isTabKey(e: { key: string; code?: string }) {
+  return e.key === "Tab" || e.code === "Tab";
+}
+
+function focusRestartButton() {
+  const button = document.getElementById(
+    "typing-restart-button"
+  ) as HTMLButtonElement | null;
+  button?.focus({ preventScroll: true });
+}
+
+/** Mounted only on the result screen so Tab cannot escape to footer Contact. */
+function ResultsTabLock() {
+  useLayoutEffect(() => {
+    document.body.dataset.typingResults = "true";
+    const onTab = (e: KeyboardEvent) => {
+      if (!isTabKey(e)) return;
+      const target = e.target;
+      if (
+        target instanceof HTMLElement &&
+        target.closest("[data-site-dialog]")
+      ) {
+        return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      focusRestartButton();
+    };
+    window.addEventListener("keydown", onTab, true);
+    document.addEventListener("keydown", onTab, true);
+    focusRestartButton();
+    const t0 = window.setTimeout(focusRestartButton, 0);
+    const t1 = window.setTimeout(focusRestartButton, 80);
+    return () => {
+      delete document.body.dataset.typingResults;
+      window.removeEventListener("keydown", onTab, true);
+      document.removeEventListener("keydown", onTab, true);
+      window.clearTimeout(t0);
+      window.clearTimeout(t1);
+    };
+  }, []);
+  return null;
+}
+
 interface TypingTestProps {
   mode?: Difficulty;
   initialTimer?: TimerOption | number;
@@ -938,15 +983,16 @@ export function TypingTest({
     const onWindowKeyDown = (e: KeyboardEvent) => {
       const key = e.key;
       const finished = finishedRef.current || statusRef.current === "finished";
-      const inDialog =
+      const inSiteDialog =
         e.target instanceof HTMLElement &&
-        e.target.closest("[data-site-dialog], [role='dialog'], [aria-modal='true']");
+        e.target.closest("[data-site-dialog]");
 
-      // After results, Tab must land on Restart — not footer Contact
-      if (key === "Tab" && finished && !inDialog) {
+      if (isTabKey(e) && finished && !inSiteDialog) {
         e.preventDefault();
         e.stopPropagation();
+        e.stopImmediatePropagation();
         armRestartFromTab();
+        focusRestartButton();
         return;
       }
 
@@ -954,7 +1000,7 @@ export function TypingTest({
       if (isOtherEditable(e.target)) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
 
-      if (key === "Tab") {
+      if (isTabKey(e)) {
         if (!isTypingInteraction(e.target)) return;
         e.preventDefault();
         e.stopPropagation();
@@ -1068,44 +1114,7 @@ export function TypingTest({
   useEffect(() => {
     if (status !== "finished") {
       delete document.body.dataset.typingResults;
-      return;
     }
-    document.body.dataset.typingResults = "true";
-
-    const focusRestart = () => {
-      const button =
-        restartButtonRef.current ||
-        (document.getElementById("typing-restart-button") as HTMLButtonElement | null);
-      button?.focus({ preventScroll: true });
-    };
-
-    const onTab = (e: KeyboardEvent) => {
-      if (e.key !== "Tab") return;
-      const target = e.target;
-      if (
-        target instanceof HTMLElement &&
-        target.closest("[data-site-dialog], [role='dialog'], [aria-modal='true']")
-      ) {
-        return;
-      }
-      e.preventDefault();
-      e.stopPropagation();
-      e.stopImmediatePropagation();
-      armRestartFromTab();
-      focusRestart();
-    };
-
-    document.addEventListener("keydown", onTab, true);
-    const frame = window.requestAnimationFrame(focusRestart);
-    const t0 = window.setTimeout(focusRestart, 0);
-    const t1 = window.setTimeout(focusRestart, 50);
-    return () => {
-      delete document.body.dataset.typingResults;
-      document.removeEventListener("keydown", onTab, true);
-      window.cancelAnimationFrame(frame);
-      window.clearTimeout(t0);
-      window.clearTimeout(t1);
-    };
   }, [status]);
 
   // Do not auto-scroll on finish either if user is mid-page; optional soft nearest only
@@ -1273,6 +1282,7 @@ export function TypingTest({
 
     return (
       <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col -mt-4 sm:-mt-6">
+        <ResultsTabLock />
         <div
           ref={resultsRef}
           id="typing-test-results"
@@ -1343,21 +1353,30 @@ export function TypingTest({
               onClick={resetTest}
               autoFocus
               tabIndex={0}
+              className="ring-2 ring-blue-500 ring-offset-2 ring-offset-[var(--background)]"
+              onKeyDown={(e) => {
+                if (isTabKey(e)) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  e.currentTarget.focus();
+                }
+              }}
             >
               <RotateCcw className="h-4 w-4" />
               Restart
             </Button>
-            <Button variant="secondary" onClick={resetTest}>
+            <Button variant="secondary" onClick={resetTest} tabIndex={-1}>
               <ArrowRight className="h-4 w-4" />
               Next Test
             </Button>
-            <Button variant="outline" type="button" disabled title="Coming soon">
+            <Button variant="outline" type="button" disabled title="Coming soon" tabIndex={-1}>
               <Save className="h-4 w-4" />
               Save Result
             </Button>
             <Button
               variant="outline"
               type="button"
+              tabIndex={-1}
               onClick={async () => {
                 const text = `I scored ${displayStats.wpm} WPM with ${displayStats.accuracy}% accuracy on BulletType! 🔥 https://bullettype.online`;
                 try {
