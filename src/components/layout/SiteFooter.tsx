@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Cookie,
@@ -26,7 +26,21 @@ const linkClass =
 
 export function SiteFooter() {
   const [dialog, setDialog] = useState<"contact" | "support" | null>(null);
+  const [resultsOpen, setResultsOpen] = useState(false);
   const close = useCallback(() => setDialog(null), []);
+
+  useEffect(() => {
+    const sync = () =>
+      setResultsOpen(document.body.dataset.typingResults === "true");
+    sync();
+    const observer = new MutationObserver(sync);
+    observer.observe(document.body, {
+      attributes: true,
+      attributeFilter: ["data-typing-results"],
+    });
+    return () => observer.disconnect();
+  }, []);
+  const footerTabIndex = resultsOpen ? -1 : undefined;
 
   return (
     <>
@@ -38,6 +52,7 @@ export function SiteFooter() {
           <button
             type="button"
             className={linkClass}
+            tabIndex={footerTabIndex}
             onClick={() => setDialog("contact")}
           >
             <Mail className="h-3 w-3" aria-hidden="true" />
@@ -46,6 +61,7 @@ export function SiteFooter() {
           <button
             type="button"
             className={linkClass}
+            tabIndex={footerTabIndex}
             onClick={() => setDialog("support")}
           >
             <Headphones className="h-3 w-3" aria-hidden="true" />
@@ -56,6 +72,7 @@ export function SiteFooter() {
             target="_blank"
             rel="noopener noreferrer"
             className={linkClass}
+            tabIndex={footerTabIndex}
           >
             <MessagesSquare className="h-3 w-3" aria-hidden="true" />
             Discord
@@ -65,6 +82,7 @@ export function SiteFooter() {
             target="_blank"
             rel="noopener noreferrer"
             className={linkClass}
+            tabIndex={footerTabIndex}
           >
             <Github className="h-3 w-3" aria-hidden="true" />
             GitHub
@@ -74,25 +92,27 @@ export function SiteFooter() {
             target="_blank"
             rel="noopener noreferrer"
             className={linkClass}
+            tabIndex={footerTabIndex}
           >
             <Twitter className="h-3 w-3" aria-hidden="true" />
             Twitter
           </a>
-          <Link href="/terms" className={linkClass}>
+          <Link href="/terms" className={linkClass} tabIndex={footerTabIndex}>
             <FileText className="h-3 w-3" aria-hidden="true" />
             Terms
           </Link>
-          <Link href="/security" className={linkClass}>
+          <Link href="/security" className={linkClass} tabIndex={footerTabIndex}>
             <Shield className="h-3 w-3" aria-hidden="true" />
             Security
           </Link>
-          <Link href="/privacy" className={linkClass}>
+          <Link href="/privacy" className={linkClass} tabIndex={footerTabIndex}>
             <Lock className="h-3 w-3" aria-hidden="true" />
             Privacy
           </Link>
           <button
             type="button"
             className={linkClass}
+            tabIndex={footerTabIndex}
             onClick={() => openCookiePopup()}
           >
             <Cookie className="h-3 w-3" aria-hidden="true" />

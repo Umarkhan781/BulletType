@@ -1066,11 +1066,46 @@ export function TypingTest({
   }, [focusInput, syncCounters]);
 
   useEffect(() => {
-    if (status !== "finished") return;
-    const id = window.setTimeout(() => {
-      restartButtonRef.current?.focus({ preventScroll: true });
-    }, 0);
-    return () => window.clearTimeout(id);
+    if (status !== "finished") {
+      delete document.body.dataset.typingResults;
+      return;
+    }
+    document.body.dataset.typingResults = "true";
+
+    const focusRestart = () => {
+      const button =
+        restartButtonRef.current ||
+        (document.getElementById("typing-restart-button") as HTMLButtonElement | null);
+      button?.focus({ preventScroll: true });
+    };
+
+    const onTab = (e: KeyboardEvent) => {
+      if (e.key !== "Tab") return;
+      const target = e.target;
+      if (
+        target instanceof HTMLElement &&
+        target.closest("[data-site-dialog], [role='dialog'], [aria-modal='true']")
+      ) {
+        return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      armRestartFromTab();
+      focusRestart();
+    };
+
+    document.addEventListener("keydown", onTab, true);
+    const frame = window.requestAnimationFrame(focusRestart);
+    const t0 = window.setTimeout(focusRestart, 0);
+    const t1 = window.setTimeout(focusRestart, 50);
+    return () => {
+      delete document.body.dataset.typingResults;
+      document.removeEventListener("keydown", onTab, true);
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(t0);
+      window.clearTimeout(t1);
+    };
   }, [status]);
 
   // Do not auto-scroll on finish either if user is mid-page; optional soft nearest only
@@ -1302,7 +1337,13 @@ export function TypingTest({
           </div>
 
           <div className="flex flex-wrap justify-center gap-3 mt-8">
-            <Button ref={restartButtonRef} onClick={resetTest} autoFocus>
+            <Button
+              id="typing-restart-button"
+              ref={restartButtonRef}
+              onClick={resetTest}
+              autoFocus
+              tabIndex={0}
+            >
               <RotateCcw className="h-4 w-4" />
               Restart
             </Button>
