@@ -34,6 +34,9 @@ ALTER TABLE public.user_visits
 ALTER TABLE public.user_visits
   ADD COLUMN IF NOT EXISTS user_id text;
 
+ALTER TABLE public.user_visits
+  ADD COLUMN IF NOT EXISTS host text;
+
 -- If user_id was uuid before, convert to text (ignore error if already text)
 DO $$
 BEGIN

@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import { getOrCreateVisitorId } from "@/lib/guestIdentity";
+import { isLocalDevHost } from "@/lib/devHost";
 
 /** Consider someone "online" if they heartbeated within this window */
 export const ONLINE_WINDOW_MS = 90_000; // 90 seconds
@@ -19,6 +20,7 @@ export async function sendPresenceHeartbeat(
   userId?: string | null
 ): Promise<{ error?: string }> {
   if (typeof window === "undefined") return {};
+  if (isLocalDevHost()) return {};
 
   const now = new Date().toISOString();
   const key = presenceKey(userId);

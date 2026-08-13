@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import { getCachedUserLocation, type UserLocation } from "@/lib/location";
 import { getGuestIdentity } from "@/lib/guestIdentity";
+import { getPageHost, isLocalAnalyticsRow, isLocalDevHost } from "@/lib/devHost";
 
 export type ActionType =
   | "page_view"
@@ -27,6 +28,7 @@ export type UserActionRow = {
   longitude: number | null;
   location_label: string | null;
   user_agent: string | null;
+  host?: string | null;
 };
 
 function defaultAvatar(seed: string) {
@@ -119,6 +121,8 @@ export async function logUserAction(options: {
   userId?: string | null;
 }): Promise<{ error?: string }> {
   if (typeof window === "undefined") return {};
+  // Local development must never pollute production admin results
+  if (isLocalDevHost()) return {};
 
   // Never log pure admin browsing as customer activity
   const path =
@@ -150,9 +154,19 @@ export async function logUserAction(options: {
       typeof navigator !== "undefined"
         ? navigator.userAgent.slice(0, 300)
         : null,
+    host: getPageHost() || null,
   };
 
   const { error } = await supabase.from("user_actions").insert(row);
+  if (error && /host/i.test(error.message)) {
+    const { host: _host, ...withoutHost } = row;
+    const retry = await supabase.from("user_actions").insert(withoutHost);
+    if (retry.error) {
+      console.warn("[activity] log failed:", retry.error.message);
+      return { error: retry.error.message };
+    }
+    return {};
+  }
   if (error) {
     console.warn("[activity] log failed:", error.message);
     return { error: error.message };
@@ -176,7 +190,10 @@ export async function fetchRecentActions(limit = 80): Promise<{
   if (error) {
     return { rows: [], error: error.message };
   }
-  return { rows: (data || []) as UserActionRow[] };
+  const rows = ((data || []) as UserActionRow[]).filter(
+    (row) => !isLocalAnalyticsRow(row)
+  );
+  return { rows };
 }
 
 export function formatActionLabel(actionType: string): string {

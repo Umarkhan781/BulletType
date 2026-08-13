@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import { getOrCreateVisitorId } from "@/lib/guestIdentity";
+import { getPageHost, isLocalDevHost } from "@/lib/devHost";
 
 const VISIT_SESSION_KEY = "bullettype-visit-recorded-v2";
 
@@ -17,6 +18,7 @@ function startOfLocalDayISO() {
  */
 export async function recordSiteVisit(userId?: string | null): Promise<void> {
   if (typeof window === "undefined") return;
+  if (isLocalDevHost()) return;
 
   const visitorId = getOrCreateVisitorId();
   const sessionTag = userId ? `user:${userId}` : `guest:${visitorId}`;
@@ -65,7 +67,7 @@ export async function recordSiteVisit(userId?: string | null): Promise<void> {
   }
 
   if (!alreadyToday) {
-    const { error } = await supabase.from("user_visits").insert({
+    const payload: Record<string, unknown> = {
       user_id: userId || null,
       visitor_id: visitorId,
       visited_at: now,
@@ -73,7 +75,13 @@ export async function recordSiteVisit(userId?: string | null): Promise<void> {
         typeof navigator !== "undefined"
           ? navigator.userAgent.slice(0, 300)
           : null,
-    });
+      host: getPageHost() || null,
+    };
+    let { error } = await supabase.from("user_visits").insert(payload);
+    if (error && /host/i.test(error.message)) {
+      delete payload.host;
+      ({ error } = await supabase.from("user_visits").insert(payload));
+    }
 
     // If insert fails (table/policies missing), don't mark session as recorded
     if (error) {

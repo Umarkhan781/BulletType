@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { isLocalAnalyticsRow } from "@/lib/devHost";
 import { daysAgoISO, monthsAgoISO } from "@/lib/visits";
 import {
   countRealtimeActiveUsers,
@@ -53,6 +54,7 @@ interface AdminStats {
 type VisitRow = {
   user_id?: string | null;
   visitor_id?: string | null;
+  host?: string | null;
 };
 
 /** One key per person: prefer logged-in user_id, else browser visitor_id */
@@ -79,15 +81,23 @@ async function fetchVisitRowsSince(sinceISO: string): Promise<{
   // Prefer visited_at; fall back to created_at if needed
   let query = await supabase
     .from("user_visits")
-    .select("user_id, visitor_id")
+    .select("user_id, visitor_id, host")
     .gte("visited_at", sinceISO)
     .limit(10000);
 
   if (query.error) {
     query = await supabase
       .from("user_visits")
-      .select("user_id, visitor_id")
+      .select("user_id, visitor_id, host")
       .gte("created_at", sinceISO)
+      .limit(10000);
+  }
+
+  if (query.error && /host/i.test(query.error.message)) {
+    query = await supabase
+      .from("user_visits")
+      .select("user_id, visitor_id")
+      .gte("visited_at", sinceISO)
       .limit(10000);
   }
 
@@ -99,7 +109,9 @@ async function fetchVisitRowsSince(sinceISO: string): Promise<{
     };
   }
 
-  const rows = (query.data || []) as VisitRow[];
+  const rawRows = (query.data || []) as VisitRow[];
+  const rows = rawRows.filter((row) => !isLocalAnalyticsRow(row));
+  const droppedLocal = rawRows.length - rows.length;
 
   // Exact total row count (may be higher than limit used for unique set)
   let totalCount = rows.length;
@@ -120,6 +132,7 @@ async function fetchVisitRowsSince(sinceISO: string): Promise<{
     }
   }
 
+  totalCount = Math.max(0, totalCount - droppedLocal);
   return { rows, totalCount };
 }
 

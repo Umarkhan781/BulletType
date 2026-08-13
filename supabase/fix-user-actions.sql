@@ -30,6 +30,9 @@ CREATE INDEX IF NOT EXISTS user_actions_user_id_idx
 CREATE INDEX IF NOT EXISTS user_actions_visitor_id_idx
   ON public.user_actions (visitor_id);
 
+ALTER TABLE public.user_actions
+  ADD COLUMN IF NOT EXISTS host text;
+
 ALTER TABLE public.user_actions ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Anyone can insert actions" ON public.user_actions;
