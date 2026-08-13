@@ -46,9 +46,9 @@ export function CookieConsent() {
   if (!visible) return null;
 
   const choose = (value: CookieConsentValue) => {
-    setCookieConsent(value);
     setForced(false);
     setDismissed(true);
+    setCookieConsent(value);
   };
 
   return (
@@ -58,6 +58,8 @@ export function CookieConsent() {
       aria-live="polite"
       aria-label="Cookie preferences"
       className="fixed bottom-[clamp(3.25rem,7vh,5rem)] right-3 z-[80] w-[min(17.5rem,calc(100vw-1.5rem))] sm:right-5"
+      onMouseDown={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
     >
       <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-[var(--card-foreground)] shadow-lg shadow-black/20">
         <div className="mb-2 flex items-start justify-between gap-2">
@@ -79,7 +81,11 @@ export function CookieConsent() {
         <div className="flex items-center gap-1.5">
           <button
             type="button"
-            onClick={() => choose("allow")}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              choose("allow");
+            }}
             className={cn(
               "rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]",
               stored === "allow"
@@ -91,12 +97,16 @@ export function CookieConsent() {
           </button>
           <button
             type="button"
-            onClick={() => choose("deny")}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              choose("deny");
+            }}
             className={cn(
-              "rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]",
+              "rounded-md border border-[var(--border)] px-2.5 py-1 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]",
               stored === "deny"
                 ? "bg-[var(--muted)] text-[var(--foreground)]"
-                : "text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+                : "bg-[var(--card)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
             )}
           >
             Decline

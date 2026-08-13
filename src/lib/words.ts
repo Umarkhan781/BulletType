@@ -506,6 +506,60 @@ export function getExpertChallengeWords(
   return sprinkleExpertNumbers(words, level).slice(0, count);
 }
 
+export type WordsDifficulty = "small" | "regular" | "thick";
+
+const thickWords = highLevelWords.filter((word) => word.length >= 8);
+
+export function getStyledWords(
+  count: number,
+  style: WordsDifficulty = "regular",
+  withPunctuation = false,
+  withNumbers = false
+): string[] {
+  const pool =
+    style === "small"
+      ? beginnerWords
+      : style === "thick"
+        ? thickWords.length
+          ? thickWords
+          : highLevelWords
+        : intermediateWords;
+  const difficulty =
+    style === "small"
+      ? "beginner"
+      : style === "thick"
+        ? "intermediate"
+        : "intermediate";
+  const words: string[] = [];
+  for (let i = 0; i < count; i++) {
+    words.push(decorateWord(pick(pool), difficulty, withPunctuation, withNumbers));
+  }
+  return words;
+}
+
+const ORIGINAL_QUOTES = [
+  "Morning markets opened with a cautious lift as shoppers returned to the covered stalls along the river. Traders spoke quietly about last week's rain, the price of grain, and the hope that a dry spell would hold through the weekend. A baker wiped flour from his hands and said the city's appetite had not changed, only the hour at which people arrived.",
+  "In the third chapter of her travel notes, the writer describes a coastal town that woke before the gulls. Windows opened onto narrow streets still wet from the night tide. She writes that the lighthouse keeper measured the day not by clocks, but by the color of the water and the first boat to clear the harbor wall.",
+  "The editorial argued that public libraries remain one of the few rooms where a person may sit without buying anything. A student at the far table copied dates into a notebook. Near the window an older man turned the pages of a newspaper with the same care he once used for letters from home. Silence, the piece concluded, is also a civic service.",
+  "After the committee adjourned, the minutes recorded a simple decision: the park would keep its old oaks. Residents had spoken of shade in July, of children who learned to ride bicycles beneath those branches, and of a bench that faced the pond. The vote was not dramatic. It was, the secretary wrote, the sort of choice a town makes when it remembers itself.",
+  "He had not expected the letter to arrive in winter. The paper was thin, the handwriting patient, and the news was neither tragic nor joyful, only true. His sister had taken a post at a school two valleys over. She asked whether he still walked the ridge on Sundays. He folded the page and set it beside the lamp, as if the question needed a quiet place to rest.",
+  "A review of the new civic museum praised its refusal to shout. Rooms were arranged by ordinary work: weaving, ferrying, printing, teaching. Labels were short. One glass case held a pair of worn boots and a ticket stub from 1962. Visitors lingered longer than they expected, the critic noted, because the story did not hurry them.",
+  "On the evening the ferry was delayed, strangers shared the last of the coffee from a dented thermos. A nurse checked her watch and then put it away. The captain's voice, when it came over the speaker, was calm. Weather, he said, had the last word, and the last word tonight was patience. Nobody argued. The harbor lights kept their distance.",
+  "The book club met in a kitchen that smelled of oranges and wood smoke. They disagreed, politely, about the ending. One reader wanted justice. Another wanted mercy. The host poured more tea and said a good novel leaves both on the table. For a while they listened to rain on the porch roof, as if the weather had joined the discussion.",
+  "Field notes from the botanist describe a meadow that looked empty until you knelt. Tiny white flowers opened only after noon. Bees arrived as if they had been invited by name. She wrote that attention is a kind of hospitality: the land reveals itself to those who stay long enough to be considered guests rather than visitors.",
+  "The city columnist returned to the old railway station after the restoration. Marble that had been gray was merely dusty. A clock that had stopped in another decade now kept honest time. He watched a child count the arches and decided that some repairs are not about the past at all. They are about giving the present a better room in which to wait.",
+  "In late autumn the orchard workers stacked crates with the unhurried skill of people who have done the same work for years. Apples knocked softly against wood. Someone began a song and did not finish it. The foreman said the yield was fair, the weather had been kinder than last year, and the road to town was still open. That, he added, was enough news for one afternoon.",
+  "She kept a journal of ordinary weather because extraordinary days, she believed, could take care of their own remembering. Tuesday was wind and a torn envelope. Wednesday was clear enough to see the hills. Thursday she wrote only: the neighbor's dog learned a new gate. Years later those lines read like a life, complete and unadvertised.",
+];
+
+export function getQuoteWords(): string[] {
+  const quote = pick(ORIGINAL_QUOTES);
+  return quote
+    .split(/\s+/)
+    .map((word) => word.trim())
+    .filter(Boolean);
+}
+
 export function getRandomSentence(): string {
   return commonSentences[Math.floor(Math.random() * commonSentences.length)];
 }

@@ -16,8 +16,12 @@ import {
   calculateAccuracy,
   formatTime,
 } from "@/lib/utils";
-import { getExpertChallengeWords, getRandomWords } from "@/lib/words";
-import type { ExpertDifficulty } from "@/lib/words";
+import {
+  getExpertChallengeWords,
+  getQuoteWords,
+  getStyledWords,
+} from "@/lib/words";
+import type { ExpertDifficulty, WordsDifficulty } from "@/lib/words";
 import { useSettingsStore } from "@/store/useSettingsStore";
 import { useUserStore } from "@/store/useUserStore";
 import type { Difficulty, TimerOption, TypingStats, TestResult } from "@/types";
@@ -34,6 +38,10 @@ interface TypingTestProps {
   numbers?: boolean;
   /** Expert practice difficulty (Normal / Hard / Extreme) */
   expertLevel?: ExpertDifficulty;
+  /** Words-mode vocabulary: Small / Regular / Thick */
+  wordsDifficulty?: WordsDifficulty;
+  /** Quote mode uses original publication-style paragraphs */
+  contentKind?: "words" | "quote";
   /** Expert: space commits a word and Backspace cannot return to it */
   lockCommittedWords?: boolean;
   /** Show built-in 15/30/60/120 timer chips (expert page) */
@@ -325,6 +333,8 @@ export function TypingTest({
   punctuation: punctuationProp,
   numbers: numbersProp,
   expertLevel,
+  wordsDifficulty = "regular",
+  contentKind = "words",
   lockCommittedWords = false,
   showTimerControls,
   onComplete,
@@ -421,30 +431,29 @@ export function TypingTest({
       setWords(customText.split(" ").filter(Boolean));
       return;
     }
+    if (contentKind === "quote") {
+      setWords(getQuoteWords());
+      return;
+    }
     // Timed tests need a long word pool so text does not run out early
     const count =
       testMode === "time"
         ? Math.max(wordCount, Math.ceil(durationSec * 5), 80)
         : wordCount;
+    if (mode === "expert" && expertLevel) {
+      setWords(getExpertChallengeWords(count, expertLevel));
+      return;
+    }
     setWords(
-      mode === "expert" && expertLevel
-        ? getExpertChallengeWords(count, expertLevel)
-        : getRandomWords(
-            count,
-            mode === "beginner"
-              ? "beginner"
-              : mode === "intermediate"
-                ? "intermediate"
-                : "expert",
-            punctuation,
-            numbers
-          )
+      getStyledWords(count, wordsDifficulty, punctuation, numbers)
     );
   }, [
     customText,
     wordCount,
     mode,
     expertLevel,
+    wordsDifficulty,
+    contentKind,
     punctuation,
     numbers,
     testMode,

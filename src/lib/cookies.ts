@@ -17,14 +17,17 @@ export function openCookiePopup() {
 
 export type CookieConsentValue = "allow" | "deny";
 
-export type PracticeMode = "time" | "words" | "custom";
+export type PracticeMode = "time" | "words" | "custom" | "quote";
 
 export type ExpertDifficultyPref = "normal" | "hard" | "extreme";
+
+export type WordsDifficultyPref = "small" | "regular" | "thick";
 
 export type PracticeTypingPrefs = {
   mode: PracticeMode;
   timeValue: number;
   wordCount: number;
+  wordsDifficulty: WordsDifficultyPref;
   punctuation: boolean;
   numbers: boolean;
   expert: boolean;
@@ -87,7 +90,12 @@ export function parseTypingPrefs(
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as Partial<PracticeTypingPrefs>;
-    if (parsed.mode !== "time" && parsed.mode !== "words" && parsed.mode !== "custom") {
+    if (
+      parsed.mode !== "time" &&
+      parsed.mode !== "words" &&
+      parsed.mode !== "custom" &&
+      parsed.mode !== "quote"
+    ) {
       return null;
     }
     const timeValue = Number(parsed.timeValue);
@@ -106,6 +114,10 @@ export function parseTypingPrefs(
       mode: parsed.mode,
       timeValue,
       wordCount,
+      wordsDifficulty:
+        parsed.wordsDifficulty === "small" || parsed.wordsDifficulty === "thick"
+          ? parsed.wordsDifficulty
+          : "regular",
       punctuation: Boolean(parsed.punctuation),
       numbers: Boolean(parsed.numbers),
       expert: Boolean(parsed.expert),
@@ -124,7 +136,14 @@ export function parseTypingPrefs(
 }
 
 export function getCookieConsent(): CookieConsentValue | null {
-  return parseCookieConsent(getCookie(COOKIE_CONSENT_KEY));
+  const fromCookie = parseCookieConsent(getCookie(COOKIE_CONSENT_KEY));
+  if (fromCookie) return fromCookie;
+  if (typeof window === "undefined") return null;
+  try {
+    return parseCookieConsent(sessionStorage.getItem(COOKIE_CONSENT_KEY));
+  } catch {
+    return null;
+  }
 }
 
 export function hasCookieConsent(): boolean {
@@ -132,6 +151,11 @@ export function hasCookieConsent(): boolean {
 }
 
 export function setCookieConsent(value: CookieConsentValue) {
+  try {
+    sessionStorage.setItem(COOKIE_CONSENT_KEY, value);
+  } catch {
+    // private mode may block sessionStorage
+  }
   setCookie(COOKIE_CONSENT_KEY, value, CONSENT_MAX_AGE);
   if (value === "deny") {
     deleteCookie(TYPING_PREFS_KEY);

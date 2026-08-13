@@ -11,6 +11,7 @@ import {
   type ExpertDifficultyPref,
   type PracticeMode,
   type PracticeTypingPrefs,
+  type WordsDifficultyPref,
 } from "@/lib/cookies";
 
 const WORD_PRESETS = [10, 15, 20, 30] as const;
@@ -84,7 +85,10 @@ export function PracticeContent({
         : "intermediate";
 
   const [limitMode, setLimitMode] = useState<PracticeMode>(
-    initialPrefs?.mode ?? "time"
+    initialPrefs?.mode ?? "words"
+  );
+  const [wordsDifficulty, setWordsDifficulty] = useState<WordsDifficultyPref>(
+    initialPrefs?.wordsDifficulty ?? "regular"
   );
   const [wordPreset, setWordPreset] = useState(
     presetWords(initialPrefs?.wordCount ?? 15)
@@ -125,6 +129,7 @@ export function PracticeContent({
     mode: limitMode,
     timeValue: timePreset,
     wordCount: wordPreset,
+    wordsDifficulty,
     punctuation,
     numbers,
     expert,
@@ -141,6 +146,7 @@ export function PracticeContent({
     limitMode,
     timePreset,
     wordPreset,
+    wordsDifficulty,
     punctuation,
     numbers,
     expert,
@@ -164,6 +170,7 @@ export function PracticeContent({
     limitMode,
     timePreset,
     wordPreset,
+    wordsDifficulty,
     punctuation,
     numbers,
     expert,
@@ -188,7 +195,9 @@ export function PracticeContent({
   }, [limitMode, customKind, customSecondsApplied, timePreset]);
 
   const testMode: "words" | "time" =
-    limitMode === "words" || (limitMode === "custom" && customKind === "words")
+    limitMode === "words" ||
+    limitMode === "quote" ||
+    (limitMode === "custom" && customKind === "words")
       ? "words"
       : "time";
 
@@ -204,6 +213,8 @@ export function PracticeContent({
     numbers ? "n" : "",
     expert ? "x" : "",
     expert ? expertDifficulty : "",
+    limitMode === "words" ? wordsDifficulty : "",
+    limitMode === "quote" ? "quote" : "",
   ].join("-");
 
   const applyCustomWords = () => {
@@ -257,6 +268,7 @@ export function PracticeContent({
                   const next = !on;
                   setPunctuation(next);
                   setNumbers(next);
+                  if (next && limitMode === "quote") setLimitMode("words");
                   return next;
                 });
               }}
@@ -280,6 +292,20 @@ export function PracticeContent({
               onClick={() => setLimitMode("words")}
             >
               Words
+            </OptionControl>
+            <OptionControl
+              active={limitMode === "quote"}
+              title="Publication-style paragraph"
+              onClick={() => {
+                if (expert) {
+                  setExpert(false);
+                  setPunctuation(false);
+                  setNumbers(false);
+                }
+                setLimitMode("quote");
+              }}
+            >
+              Quote
             </OptionControl>
             <OptionControl
               active={limitMode === "custom"}
@@ -314,13 +340,14 @@ export function PracticeContent({
                   className="mx-1 hidden h-3.5 w-px bg-[var(--border)] sm:block"
                   aria-hidden="true"
                 />
-                {WORD_PRESETS.map((count) => (
+                {(["small", "regular", "thick"] as const).map((level) => (
                   <OptionControl
-                    key={count}
-                    active={wordPreset === count}
-                    onClick={() => setWordPreset(count)}
+                    key={level}
+                    active={wordsDifficulty === level}
+                    onClick={() => setWordsDifficulty(level)}
+                    title={`${level[0]!.toUpperCase()}${level.slice(1)} word set`}
                   >
-                    {count}
+                    {level[0]!.toUpperCase() + level.slice(1)}
                   </OptionControl>
                 ))}
               </>
@@ -437,6 +464,8 @@ export function PracticeContent({
           punctuation={punctuation}
           numbers={numbers}
           expertLevel={expert ? expertDifficulty : undefined}
+          wordsDifficulty={wordsDifficulty}
+          contentKind={limitMode === "quote" && !expert ? "quote" : "words"}
           lockCommittedWords={expert}
           showTimerControls={false}
           onStatusChange={setTestStatus}
