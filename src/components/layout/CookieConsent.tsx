@@ -1,12 +1,15 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { X } from "lucide-react";
 import {
   COOKIE_CONSENT_EVENT,
+  COOKIE_POPUP_EVENT,
   getCookieConsent,
   setCookieConsent,
   type CookieConsentValue,
 } from "@/lib/cookies";
+import { cn } from "@/lib/utils";
 
 function subscribe(onStoreChange: () => void) {
   window.addEventListener(COOKIE_CONSENT_EVENT, onStoreChange);
@@ -22,40 +25,81 @@ function getServerSnapshot(): CookieConsentValue | "none" {
 }
 
 export function CookieConsent() {
-  const consent = useSyncExternalStore(
+  const stored = useSyncExternalStore(
     subscribe,
     getSnapshot,
     getServerSnapshot
   );
+  const [forced, setForced] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
 
-  if (consent !== "none") return null;
+  useEffect(() => {
+    const open = () => {
+      setDismissed(false);
+      setForced(true);
+    };
+    window.addEventListener(COOKIE_POPUP_EVENT, open);
+    return () => window.removeEventListener(COOKIE_POPUP_EVENT, open);
+  }, []);
+
+  const visible = (stored === "none" && !dismissed) || forced;
+  if (!visible) return null;
+
+  const choose = (value: CookieConsentValue) => {
+    setCookieConsent(value);
+    setForced(false);
+    setDismissed(true);
+  };
 
   return (
     <div
       role="dialog"
       data-cookie-consent=""
       aria-live="polite"
-      aria-label="Cookie consent"
-      className="fixed inset-x-0 bottom-0 z-[80] px-3 pb-3 sm:px-4 sm:pb-4"
+      aria-label="Cookie preferences"
+      className="fixed bottom-[clamp(3.25rem,7vh,5rem)] right-3 z-[80] w-[min(17.5rem,calc(100vw-1.5rem))] sm:right-5"
     >
-      <div className="mx-auto flex max-w-3xl flex-col gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:px-5 sm:py-3.5">
-        <p className="text-[13px] leading-relaxed text-[var(--muted-foreground)]">
-          We use cookies to remember your preferences and improve your experience.
-        </p>
-        <div className="flex shrink-0 items-center gap-2">
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-[var(--card-foreground)] shadow-lg shadow-black/20">
+        <div className="mb-2 flex items-start justify-between gap-2">
+          <p className="text-[11px] leading-snug text-[var(--muted-foreground)]">
+            We use cookies to remember your preferences and improve your experience.
+          </p>
           <button
             type="button"
-            onClick={() => setCookieConsent("allow")}
-            className="rounded-lg bg-[var(--primary)] px-3 py-1.5 text-[13px] font-medium text-[var(--primary-foreground)] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+            aria-label="Close cookie popup"
+            onClick={() => {
+              setForced(false);
+              setDismissed(true);
+            }}
+            className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
           >
-            Allow Cookies
+            <X className="h-3 w-3" aria-hidden="true" />
+          </button>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => choose("allow")}
+            className={cn(
+              "rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]",
+              stored === "allow"
+                ? "bg-[var(--primary)] text-[var(--primary-foreground)]"
+                : "bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90"
+            )}
+          >
+            Allow
           </button>
           <button
             type="button"
-            onClick={() => setCookieConsent("deny")}
-            className="rounded-lg px-3 py-1.5 text-[13px] font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+            onClick={() => choose("deny")}
+            className={cn(
+              "rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]",
+              stored === "deny"
+                ? "bg-[var(--muted)] text-[var(--foreground)]"
+                : "text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+            )}
           >
-            Continue Without Cookies
+            Decline
           </button>
         </div>
       </div>

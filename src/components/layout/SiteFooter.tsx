@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import Link from "next/link";
 import {
+  Cookie,
   FileText,
   Github,
   Headphones,
@@ -13,6 +14,7 @@ import {
   Twitter,
 } from "lucide-react";
 import { SiteDialog, WhatsAppIcon } from "@/components/layout/SiteDialog";
+import { openCookiePopup } from "@/lib/cookies";
 
 const EMAIL = "umar092939495@gmail.com";
 const WHATSAPP_DISPLAY = "+923405026367";
@@ -88,6 +90,14 @@ export function SiteFooter() {
             <Lock className="h-3 w-3" aria-hidden="true" />
             Privacy
           </Link>
+          <button
+            type="button"
+            className={linkClass}
+            onClick={() => openCookiePopup()}
+          >
+            <Cookie className="h-3 w-3" aria-hidden="true" />
+            Cookies
+          </button>
         </nav>
       </footer>
 

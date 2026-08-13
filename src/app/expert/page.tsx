@@ -308,6 +308,7 @@ export default function ExpertPage() {
         punctuation={punctuation}
         numbers={numbers}
         expertLevel={expertDifficulty}
+        lockCommittedWords
         showTimerControls={false}
         onStatusChange={setTestStatus}
       />

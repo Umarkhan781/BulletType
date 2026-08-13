@@ -309,6 +309,7 @@ body {
   top: 0;
   width: 2px;
   height: 1.05em;
+  min-height: 1.05em;
   margin: 0;
   background-color: var(--caret);
   border-radius: 1px;

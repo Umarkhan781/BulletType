@@ -107,11 +107,13 @@ export function PracticeContent({
   const [customKind, setCustomKind] = useState<"time" | "words">(
     initialPrefs?.customKind ?? "time"
   );
-  const [punctuation, setPunctuation] = useState(
-    initialPrefs?.punctuation ?? false
-  );
-  const [numbers, setNumbers] = useState(initialPrefs?.numbers ?? false);
   const [expert, setExpert] = useState(initialPrefs?.expert ?? false);
+  const [punctuation, setPunctuation] = useState(
+    initialPrefs?.expert ? true : (initialPrefs?.punctuation ?? false)
+  );
+  const [numbers, setNumbers] = useState(
+    initialPrefs?.expert ? true : (initialPrefs?.numbers ?? false)
+  );
   const [expertDifficulty, setExpertDifficulty] =
     useState<ExpertDifficultyPref>(initialPrefs?.expertDifficulty ?? "normal");
   const [testStatus, setTestStatus] = useState<"idle" | "running" | "finished">(
@@ -228,7 +230,10 @@ export function PracticeContent({
               active={punctuation}
               ariaPressed={punctuation}
               title="Include punctuation"
-              onClick={() => setPunctuation((v) => !v)}
+              onClick={() => {
+                if (expert) return;
+                setPunctuation((v) => !v);
+              }}
             >
               Punctuation
             </OptionControl>
@@ -236,7 +241,10 @@ export function PracticeContent({
               active={numbers}
               ariaPressed={numbers}
               title="Include numbers"
-              onClick={() => setNumbers((v) => !v)}
+              onClick={() => {
+                if (expert) return;
+                setNumbers((v) => !v);
+              }}
             >
               Numbers
             </OptionControl>
@@ -244,7 +252,14 @@ export function PracticeContent({
               active={expert}
               ariaPressed={expert}
               title="Expert word set"
-              onClick={() => setExpert((v) => !v)}
+              onClick={() => {
+                setExpert((on) => {
+                  const next = !on;
+                  setPunctuation(next);
+                  setNumbers(next);
+                  return next;
+                });
+              }}
             >
               Expert
             </OptionControl>
@@ -422,6 +437,7 @@ export function PracticeContent({
           punctuation={punctuation}
           numbers={numbers}
           expertLevel={expert ? expertDifficulty : undefined}
+          lockCommittedWords={expert}
           showTimerControls={false}
           onStatusChange={setTestStatus}
         />

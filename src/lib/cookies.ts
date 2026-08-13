@@ -8,6 +8,12 @@ export const COOKIE_CONSENT_KEY = "bt-cookie-consent";
 export const TYPING_PREFS_KEY = "bt-typing-prefs";
 export const THEME_COOKIE_KEY = "bt-theme";
 export const COOKIE_CONSENT_EVENT = "bt-cookie-consent";
+export const COOKIE_POPUP_EVENT = "bt-open-cookie-popup";
+
+export function openCookiePopup() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(COOKIE_POPUP_EVENT));
+}
 
 export type CookieConsentValue = "allow" | "deny";
 

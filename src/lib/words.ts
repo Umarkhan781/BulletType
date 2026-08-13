@@ -214,7 +214,7 @@ function decorateWord(
   let word = base;
   const expert = difficulty === "expert";
 
-  if (withNumbers && Math.random() < (expert ? 0.22 : 0.15)) {
+  if (withNumbers && Math.random() < (expert ? 0.3 : 0.15)) {
     // Sometimes replace word with a number token; sometimes append digits
     if (Math.random() < 0.55) {
       word = randomNumberToken(expert);
@@ -405,12 +405,57 @@ function fillFromSentences(count: number, pool: string[]): string[] {
   return words.slice(0, count);
 }
 
+function expertNumberToken(level: ExpertDifficulty): string {
+  const styles = [
+    () => String(Math.floor(Math.random() * 90) + 10),
+    () => String(Math.floor(Math.random() * 9000) + 1000),
+    () => (Math.random() * 20 + 1).toFixed(1),
+    () => `${Math.floor(Math.random() * 80) + 10}%`,
+    () => `${Math.floor(Math.random() * 9) + 1}x`,
+    () => `${Math.floor(Math.random() * 12) + 1}/7`,
+    () => String(2000 + Math.floor(Math.random() * 30)),
+  ];
+  if (level !== "normal") {
+    styles.push(() => randomNumberToken(true));
+  }
+  return pick(styles)();
+}
+
+/** Expert uses about 2× the normal Numbers option (~15% → ~30%), spaced out. */
+function sprinkleExpertNumbers(
+  words: string[],
+  level: ExpertDifficulty
+): string[] {
+  const rate = level === "extreme" ? 0.36 : level === "hard" ? 0.32 : 0.3;
+  const out = [...words];
+  let sinceLast = 2;
+  for (let i = 0; i < out.length; i++) {
+    sinceLast += 1;
+    const due = sinceLast >= 4 && Math.random() < 0.55;
+    if (!(Math.random() < rate || due) || sinceLast < 2) continue;
+    const form = Math.random();
+    if (form < 0.4) {
+      out[i] = expertNumberToken(level);
+    } else if (form < 0.75) {
+      out[i] = `${out[i]!.replace(/[.,!?;:]+$/g, "")}${expertNumberToken(level)}`;
+    } else {
+      out.splice(i + 1, 0, expertNumberToken(level));
+      i += 1;
+    }
+    sinceLast = 0;
+  }
+  return out;
+}
+
 export function getExpertChallengeWords(
   count: number,
   level: ExpertDifficulty
 ): string[] {
   if (level === "normal") {
-    return fillFromSentences(count, NORMAL_SENTENCES);
+    return sprinkleExpertNumbers(
+      fillFromSentences(count, NORMAL_SENTENCES),
+      "normal"
+    ).slice(0, count);
   }
 
   const words: string[] = [];
@@ -422,7 +467,7 @@ export function getExpertChallengeWords(
       let word = stream.shift() || pick(highLevelWords);
       if (Math.random() < 0.22) word = pick(highLevelWords);
       if (Math.random() < 0.18) word = pick(HARD_CONNECTORS);
-      if (Math.random() < 0.2) {
+      if (Math.random() < 0.32) {
         word = `${word}${Math.floor(Math.random() * 900) + 10}`;
       }
       if (Math.random() < 0.28) {
@@ -433,7 +478,7 @@ export function getExpertChallengeWords(
       word = maybeCaseMix(word, 0.28);
       words.push(word);
     }
-    return words.slice(0, count);
+    return sprinkleExpertNumbers(words, "hard").slice(0, count);
   }
 
   while (words.length < count) {
@@ -458,7 +503,7 @@ export function getExpertChallengeWords(
     words.push(word);
   }
 
-  return words.slice(0, count);
+  return sprinkleExpertNumbers(words, level).slice(0, count);
 }
 
 export function getRandomSentence(): string {

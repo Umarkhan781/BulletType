@@ -34,6 +34,8 @@ interface TypingTestProps {
   numbers?: boolean;
   /** Expert practice difficulty (Normal / Hard / Extreme) */
   expertLevel?: ExpertDifficulty;
+  /** Expert: space commits a word and Backspace cannot return to it */
+  lockCommittedWords?: boolean;
   /** Show built-in 15/30/60/120 timer chips (expert page) */
   showTimerControls?: boolean;
   onComplete?: (result: TestResult) => void;
@@ -323,6 +325,7 @@ export function TypingTest({
   punctuation: punctuationProp,
   numbers: numbersProp,
   expertLevel,
+  lockCommittedWords = false,
   showTimerControls,
   onComplete,
   onStatusChange,
@@ -664,6 +667,69 @@ export function TypingTest({
     resetTestRef.current = resetTest;
   }, [resetTest]);
 
+  const lockCommittedRef = useRef(lockCommittedWords);
+  useEffect(() => {
+    lockCommittedRef.current = lockCommittedWords;
+  }, [lockCommittedWords]);
+
+  const uncompleteWord = () => {
+    if (lockCommittedRef.current) return false;
+    const idx = countersRef.current.currentWordIndex;
+    if (idx <= 0) return false;
+
+    const list = wordsRef.current;
+    const history = countersRef.current.typedHistory;
+    const prevTyped = history[idx - 1] ?? "";
+    const prevWord = list[idx - 1] ?? "";
+    if (!prevTyped.length || prevTyped === prevWord) return false;
+
+    const nextHistory = history.slice(0, -1);
+    const nextIndex = idx - 1;
+
+    let correct = 0;
+    let total = 0;
+    let wrong = 0;
+    for (let i = 0; i < nextHistory.length; i++) {
+      const typed = nextHistory[i] || "";
+      const word = list[i] || "";
+      total += typed.length + 1;
+      if (typed === word) {
+        correct += word.length + 1;
+      } else {
+        for (let c = 0; c < Math.min(typed.length, word.length); c++) {
+          if (typed[c] === word[c]) correct += 1;
+        }
+        if (typed.length > 0) wrong += 1;
+      }
+    }
+    total += prevTyped.length;
+    for (let c = 0; c < Math.min(prevTyped.length, prevWord.length); c++) {
+      if (prevTyped[c] === prevWord[c]) correct += 1;
+    }
+
+    syncCounters({
+      typedHistory: nextHistory,
+      currentWordIndex: nextIndex,
+      input: prevTyped,
+      correctChars: correct,
+      totalChars: total,
+      wrongWords: wrong,
+    });
+    setTypedHistory(nextHistory);
+    setCurrentWordIndex(nextIndex);
+    setInput(prevTyped);
+    setCurrentCharIndex(prevTyped.length);
+    setCorrectChars(correct);
+    setTotalChars(total);
+    setWrongWords(wrong);
+    return true;
+  };
+
+  const uncompleteWordRef = useRef(uncompleteWord);
+  useEffect(() => {
+    uncompleteWordRef.current = uncompleteWord;
+  }, [uncompleteWord]);
+
   /** Apply typed string (shared by input onChange and global first-key capture) */
   const applyTypedValue = useCallback(
     (value: string) => {
@@ -786,6 +852,14 @@ export function TypingTest({
         syncCounters({ backspaces: next });
         return next;
       });
+      if (
+        !(countersRef.current.input || input) &&
+        countersRef.current.currentWordIndex > 0
+      ) {
+        e.preventDefault();
+        uncompleteWord();
+        return;
+      }
     }
 
     // Enter = treat as end of word / finish
@@ -939,6 +1013,8 @@ export function TypingTest({
         const prev = countersRef.current.input;
         if (prev.length > 0) {
           applyTypedValueRef.current(prev.slice(0, -1));
+        } else {
+          uncompleteWordRef.current();
         }
         return;
       }
@@ -1023,10 +1099,17 @@ export function TypingTest({
     }
     const vr = viewport.getBoundingClientRect();
     const tr = target.getBoundingClientRect();
+    const lineBox = currentWord?.getBoundingClientRect() ?? tr;
+    const fontSize = parseFloat(getComputedStyle(viewport).fontSize) || 24;
+    const caretHeight = fontSize * 1.05;
     const x = tr.left - vr.left + viewport.scrollLeft;
-    const y = tr.top - vr.top + viewport.scrollTop + tr.height * 0.08;
+    const y =
+      lineBox.top -
+      vr.top +
+      viewport.scrollTop +
+      Math.max((lineBox.height - caretHeight) / 2, fontSize * 0.08);
     caret.style.opacity = "1";
-    caret.style.height = `${Math.max(tr.height * 0.88, 14)}px`;
+    caret.style.height = `${caretHeight}px`;
     caret.style.transform = `translate3d(${x}px, ${y}px, 0)`;
   }, [currentWordIndex, currentCharIndex, words, input, status]);
 
@@ -1103,7 +1186,11 @@ export function TypingTest({
           {isCurrent &&
             status !== "finished" &&
             currentCharIndex >= word.length && (
-              <span data-caret-target="true" className="inline-block w-[0.01em]" />
+              <span
+                data-caret-target="true"
+                className="inline-block h-[1em] w-px align-baseline"
+                aria-hidden="true"
+              />
             )}
         </span>
       );
